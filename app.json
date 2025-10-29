@@ -1,21 +1,27 @@
 {
   "expo": {
-    "name": "elder-care-app",
-    "slug": "elder-care-app",
-    "version": "1.0.0",
+    "name": "CareKeeperHub",
+    "slug": "Care-Keeper-Hub",
+    "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "icon": "./appIcon.png",
+    "scheme": "carekeeperhub",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.seriously.carekeeperhub",
+      "buildNumber": "1.0.4",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.seriously.carekeeperhub"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +42,16 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "SUPABASE_URL": "https://zgxaldtqtvaloulhdmyw.supabase.co",
+      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpneGFsZHRxdHZhbG91bGhkbXl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU4OTUwOTYsImV4cCI6MjA3MTQ3MTA5Nn0.ofFSKkZMh13sR8zqpHNW9cix8hgOsnTlwFTozq1K5Ww",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "7c824517-9abb-474e-83ff-f643f5d7d895"
+      }
     }
   }
 }
