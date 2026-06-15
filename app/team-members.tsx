@@ -1,4 +1,5 @@
- import React, { useEffect, useState } from 'react';
+// app/team-members.tsx
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,107 +10,154 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
-import { useUser } from '@supabase/auth-helpers-react';
+import NavHeader from '../components/NavHeader';
+import { supabase, getSessionSafe } from '../lib/supabase';
+
+interface TeamMember {
+  id: number | string;
+  name: string;
+  email: string;
+  main_user_id: string;
+  role?: string;
+  profile_image_url?: string | null;
+}
 
 export default function TeamMembers() {
-  const [teamMembers, setTeamMembers] = useState([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingMember, setEditingMember] = useState(null);
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
   });
-
-  const user = useUser();
 
   useEffect(() => {
     fetchTeamMembers();
   }, []);
 
   const fetchTeamMembers = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('*')
-      .eq('main_user_id', user?.id);
+    try {
+      setLoading(true);
 
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      setTeamMembers(data);
+      const session = await getSessionSafe();
+      if (!session) {
+        Alert.alert(
+          'Not logged in',
+          'Please log in to manage team members.'
+        );
+        setTeamMembers([]);
+        setLoading(false);
+        return;
+      }
+
+      const mainUserId = session.user.id;
+
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('main_user_id', mainUserId);
+
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        setTeamMembers((data as TeamMember[]) || []);
+      }
+    } catch (e: any) {
+      console.error('fetchTeamMembers error:', e);
+      Alert.alert('Error', 'Something went wrong loading team members.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.email) {
-      Alert.alert('Please fill out both fields.');
-      return;
-    }
-
-    const payload = {
-      name: form.name,
-      email: form.email,
-      main_user_id: user.id,
-      profile_image_url: user.user_metadata?.profile_image_url || null, // use main user pic
-      role: 'Team Member',
-    };
-
-    if (editingMember) {
-      // Update
-      const { error } = await supabase
-        .from('team_members')
-        .update(payload)
-        .eq('id', editingMember.id);
-
-      if (error) {
-        Alert.alert('Error updating team member', error.message);
+    try {
+      const session = await getSessionSafe();
+      if (!session) {
+        Alert.alert('Not logged in', 'Please log in to manage team members.');
         return;
       }
-    } else {
-      // Insert
-      const { error } = await supabase.from('team_members').insert([payload]);
-      if (error) {
-        Alert.alert('Error adding team member', error.message);
+
+      if (!form.name || !form.email) {
+        Alert.alert('Missing info', 'Please fill out both fields.');
         return;
       }
-    }
 
-    setModalVisible(false);
-    setEditingMember(null);
-    setForm({ name: '', email: '' });
-    fetchTeamMembers();
+      const payload: Partial<TeamMember> = {
+        name: form.name,
+        email: form.email,
+        main_user_id: session.user.id,
+        role: 'Team Member',
+        profile_image_url:
+          (session.user.user_metadata as any)?.profile_image_url || null,
+      };
+
+      if (editingMember) {
+        const { error } = await supabase
+          .from('team_members')
+          .update(payload)
+          .eq('id', editingMember.id);
+
+        if (error) {
+          Alert.alert('Error updating team member', error.message);
+          return;
+        }
+      } else {
+        const { error } = await supabase.from('team_members').insert([payload]);
+        if (error) {
+          Alert.alert('Error adding team member', error.message);
+          return;
+        }
+      }
+
+      setModalVisible(false);
+      setEditingMember(null);
+      setForm({ name: '', email: '' });
+      fetchTeamMembers();
+    } catch (e: any) {
+      console.error('handleSave error:', e);
+      Alert.alert('Error', 'Something went wrong saving this team member.');
+    }
   };
 
-  const handleEdit = (member) => {
+  const handleEdit = (member: TeamMember) => {
     setEditingMember(member);
     setForm({ name: member.name, email: member.email });
     setModalVisible(true);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number | string) => {
     Alert.alert('Confirm Delete', 'Are you sure?', [
-      { text: 'Cancel' },
+      { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          const { error } = await supabase.from('team_members').delete().eq('id', id);
-          if (error) {
-            Alert.alert('Error deleting', error.message);
-          } else {
-            fetchTeamMembers();
+          try {
+            const { error } = await supabase
+              .from('team_members')
+              .delete()
+              .eq('id', id);
+            if (error) {
+              Alert.alert('Error deleting', error.message);
+            } else {
+              fetchTeamMembers();
+            }
+          } catch (e: any) {
+            console.error('handleDelete error:', e);
+            Alert.alert('Error', 'Something went wrong deleting the member.');
           }
         },
       },
     ]);
   };
 
-  const renderItem = ({ item }) => (
+  const renderItem = ({ item }: { item: TeamMember }) => (
     <View style={styles.memberBox}>
-      <Text style={styles.memberText}>{item.name} — {item.email}</Text>
+      <Text style={styles.memberText}>
+        {item.name} — {item.email}
+      </Text>
       <View style={styles.actions}>
         <TouchableOpacity onPress={() => handleEdit(item)}>
           <Text style={styles.edit}>Edit</Text>
@@ -123,22 +171,40 @@ export default function TeamMembers() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Team Members</Text>
+      <NavHeader
+        title="Team Members"
+        helpText="Invite or edit the people who help care for your loved one."
+      />
 
-      {loading ? (
-        <Text>Loading...</Text>
-      ) : (
-        <FlatList
-          data={teamMembers}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ListEmptyComponent={<Text>No team members added yet.</Text>}
-        />
-      )}
+      <View style={styles.inner}>
+        <Text style={styles.title}>Team Members</Text>
 
-      <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
-        <Text style={styles.addButtonText}>Add Team Member</Text>
-      </TouchableOpacity>
+        {loading ? (
+          <Text>Loading...</Text>
+        ) : (
+          <FlatList
+            data={teamMembers}
+            keyExtractor={(item) =>
+              item.id ? String(item.id) : `${item.email}-${item.name}`
+            }
+            renderItem={renderItem}
+            ListEmptyComponent={
+              <Text>No team members added yet.</Text>
+            }
+          />
+        )}
+
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setEditingMember(null);
+            setForm({ name: '', email: '' });
+            setModalVisible(true);
+          }}
+        >
+          <Text style={styles.addButtonText}>Add Team Member</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
@@ -151,13 +217,17 @@ export default function TeamMembers() {
             style={styles.input}
             placeholder="Name"
             value={form.name}
-            onChangeText={(text) => setForm((prev) => ({ ...prev, name: text }))}
+            onChangeText={(text) =>
+              setForm((prev) => ({ ...prev, name: text }))
+            }
           />
           <TextInput
             style={styles.input}
             placeholder="Email"
             value={form.email}
-            onChangeText={(text) => setForm((prev) => ({ ...prev, email: text }))}
+            onChangeText={(text) =>
+              setForm((prev) => ({ ...prev, email: text }))
+            }
             autoCapitalize="none"
             keyboardType="email-address"
           />
@@ -184,7 +254,8 @@ export default function TeamMembers() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#fff' },
+  inner: { flex: 1, padding: 20 },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
   memberBox: {
     padding: 14,
@@ -255,13 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 10,
   },
-  saveText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  cancelText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+  saveText: { color: '#fff', fontWeight: 'bold' },
+  cancelText: { color: '#fff', fontWeight: 'bold' },
 });
 

@@ -5,7 +5,8 @@ import NavHeader from '../../components/NavHeader';
 
 const options = [
   { label: 'Profile', route: '/profileInfo' },
-  { label: 'Subscriptions', route: '/subscription' },
+  // ✅ FIX: push to the tabs route so it exists in the same navigator group
+  { label: 'Subscriptions', route: '/(tabs)/subscription' },
   { label: 'Team Members', route: '/team-members' },
   { label: 'Amazon Links', route: '/account/amazon-links' },
   { label: 'About Us', route: '/aboutUs' },
@@ -19,7 +20,8 @@ export default function AccountScreen() {
     <View style={styles.container}>
       <NavHeader
         title="Account"
-        helpText="Manage your account settings and view information about the CareKeeper Hub."
+        helpTitle="Account Help"
+        helpText="Manage your account, profile info, subscriptions, and team members here."
       />
 
       <FlatList
@@ -60,4 +62,6 @@ const styles = StyleSheet.create({
     color: '#333',
   },
 });
+
+
 

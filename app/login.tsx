@@ -10,7 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, assertSupabaseConfigured } from '../lib/supabase';
 import { useRouter } from 'expo-router';
 
 export default function Login() {
@@ -28,6 +28,12 @@ export default function Login() {
   const handleLogin = async () => {
     const { email, password } = form;
 
+    const cfg = assertSupabaseConfigured();
+    if (!cfg.ok) {
+      Alert.alert('Config Error', cfg.message);
+      return;
+    }
+
     if (!email || !password) {
       Alert.alert('Missing fields', 'Please enter both email and password.');
       return;
@@ -41,7 +47,7 @@ export default function Login() {
     if (error) {
       Alert.alert('Login failed', error.message);
     } else {
-      router.replace('/profileInfo'); // Redirect after login
+      router.replace('/(tabs)/home'); // Redirect after login
     }
   };
 
@@ -128,4 +134,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
 

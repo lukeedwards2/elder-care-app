@@ -7,24 +7,30 @@ import {
   TouchableOpacity,
   Dimensions,
   FlatList,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import NavHeader from '@/components/NavHeader';
 
 const { width, height } = Dimensions.get('window');
-const iconSize = width * 0.17; // slightly smaller for visual balance
+
+// Dynamic scaling so icons and spacing adjust for different screen sizes
+const baseWidth = 390; // reference iPhone 14 width
+const scale = width / baseWidth;
+const iconSize = width * 0.17 * scale;
 
 const menuItems = [
-  { title: 'Notes', image: require('../../assets/notes.png'), route: '/notes' },
-  { title: 'Contacts', image: require('../../assets/contacts.png'), route: '/contacts' },
-  { title: 'Chat', image: require('../../assets/photos.png'), route: '/photos' },
-  { title: 'Supplies', image: require('../../assets/supplies.png'), route: '/supplies' },
-  { title: 'Food', image: require('../../assets/food.png'), route: '/food' },
-  { title: 'Action Needed', image: require('../../assets/action.png'), route: '/action' },
-  { title: 'Documents', image: require('../../assets/documents.png'), route: '/documents' },
-  { title: 'Rx', image: require('../../assets/rx.png'), route: '/rx' },
-  { title: 'Emergency', image: require('../../assets/ambulance.png'), route: '/ambulance' },
+  { title: 'Notes', image: require('../../assets/notes.png'), route: '/(tabs)/notes' },
+  { title: 'Contacts', image: require('../../assets/contacts.png'), route: '/(tabs)/contacts' },
+  { title: 'Chat', image: require('../../assets/photos.png'), route: '/(tabs)/photos' },
+  { title: 'Supplies', image: require('../../assets/supplies.png'), route: '/(tabs)/supplies' },
+  { title: 'Food', image: require('../../assets/food.png'), route: '/(tabs)/food' },
+  { title: 'Action Needed', image: require('../../assets/action.png'), route: '/(tabs)/action' },
+  { title: 'Documents', image: require('../../assets/documents.png'), route: '/(tabs)/documents' },
+  { title: 'Rx', image: require('../../assets/rx.png'), route: '/(tabs)/rx' },
+  { title: 'Emergency', image: require('../../assets/ambulance.png'), route: '/(tabs)/ambulance' },
 ];
+
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -64,17 +70,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   grid: {
-    paddingTop: height * 0.05,
-    paddingBottom: height * 0.06,
+    paddingTop: height * 0.06 * scale,
+    paddingBottom: height * 0.02 * scale,
     paddingHorizontal: width * 0.04,
     justifyContent: 'center',
     alignItems: 'center',
   },
   menuItem: {
-    width: width / 3.3, // ensures 3 per row with even spacing
+    width: width / 3.3,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: height * 0.015,
+    marginVertical: height * 0.035 * scale, // vertical spacing unchanged
   },
   iconWrapper: {
     width: iconSize * 1.1,
@@ -87,13 +93,23 @@ const styles = StyleSheet.create({
     height: iconSize,
   },
   label: {
-    marginTop: 6,
+    marginTop: 8 * scale,
     textAlign: 'center',
-    fontWeight: '500',
-    fontSize: width * 0.04,
+    fontWeight: '600',
+    fontSize: width * 0.039,
     color: '#000',
+    fontFamily: Platform.select({
+      ios: 'Avenir Next', // ✅ modern, sleek, professional iOS font
+      android: 'sans-serif-light', // ✅ clean Android alternative
+    }),
   },
 });
+
+
+
+
+
+
 
 
 

@@ -10,7 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, assertSupabaseConfigured } from '../lib/supabase';
 import { useRouter } from 'expo-router';
 
 export default function SignUp() {
@@ -30,43 +30,80 @@ export default function SignUp() {
   const handleSignUp = async () => {
     const { email, password, first_name, last_name } = form;
 
+    const cfg = assertSupabaseConfigured();
+    if (!cfg.ok) {
+      Alert.alert('Config Error', cfg.message);
+      return;
+    }
+
     if (!email || !password || !first_name || !last_name) {
-      Alert.alert('Please fill out all fields.');
+      Alert.alert('Missing Information', 'Please fill out all fields.');
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      // Helpful debug logs in Metro
+      console.log('SignUp: using Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+      console.log('SignUp: attempting signup for email:', email);
 
-    if (error) {
-      Alert.alert('Signup Error', error.message);
-      return;
-    }
-
-    const userId = data?.user?.id;
-    if (!userId) {
-      Alert.alert('Something went wrong with authentication.');
-      return;
-    }
-
-    const { error: profileError } = await supabase.from('profiles').insert([
-      {
-        id: userId,
+      // Create auth user + store basic metadata
+      const { data, error } = await supabase.auth.signUp({
         email,
-        first_name,
-        last_name,
-      },
-    ]);
+        password,
+        options: {
+          data: {
+            first_name,
+            last_name,
+          },
+        },
+      });
 
-    if (profileError) {
-      Alert.alert('Signup succeeded, but profile insert failed.', profileError.message);
-      return;
+      if (error) {
+        console.log('Supabase signUp error:', error);
+        Alert.alert('Signup Error', error.message || 'Unable to sign up. Please try again.');
+        return;
+      }
+
+      const userId = data?.user?.id;
+      console.log('SignUp: created user with id:', userId);
+
+      if (!userId) {
+        Alert.alert(
+          'Signup Error',
+          'Something went wrong with authentication. Please try again.'
+        );
+        return;
+      }
+
+      // Insert into profiles table
+      const { error: profileError } = await supabase.from('profiles').insert([
+        {
+          id: userId,
+          email,
+          first_name,
+          last_name,
+        },
+      ]);
+
+      if (profileError) {
+        console.log('Profile insert error:', profileError);
+        Alert.alert(
+          'Profile Error',
+          `Signup succeeded, but profile insert failed: ${profileError.message}`
+        );
+        return;
+      }
+
+      Alert.alert('Success!', 'Your account has been created.');
+      router.replace('/(tabs)/home');
+    } catch (err: any) {
+      // This will catch real network-level problems
+      console.log('SignUp exception (likely network-level):', err);
+      Alert.alert(
+        'Signup Error',
+        err?.message || 'Network error. Please check your connection and try again.'
+      );
     }
-
-    Alert.alert('Success!', 'Your account has been created.');
-    router.replace('/profileInfo');
   };
 
   return (
@@ -164,4 +201,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
+
 

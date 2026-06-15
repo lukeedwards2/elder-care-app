@@ -3,13 +3,13 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyDcSH_D2jhtsV5vknJ7VPzCtO8ZT7Xr6ow',
-  authDomain: 'caregiverapp-ffe82.firebaseapp.com',
-  databaseURL: 'https://caregiverapp-ffe82-default-rtdb.firebaseio.com',
-  projectId: 'caregiverapp-ffe82',
-  storageBucket: 'caregiverapp-ffe82.appspot.com',
-  messagingSenderId: '45311509772',
-  appId: '1:45311509772:web:86e44baec6a950c8f4f529',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);

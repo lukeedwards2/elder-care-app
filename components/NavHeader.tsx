@@ -1,120 +1,70 @@
-import React, { useState } from 'react';
-import {
-  View, Image, TouchableOpacity,
-  Modal, Text, Pressable, StyleSheet
-} from 'react-native';
+import React from 'react';
+import { View, Image, Pressable, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface NavHeaderProps {
-  helpTitle: string;
-  helpText: string;
-}
+type Props = {
+  onHelpPress?: () => void;
+};
 
-export default function NavHeader({ helpTitle, helpText }: NavHeaderProps) {
-  const [helpVisible, setHelpVisible] = useState(false);
+export default function NavHeader({ onHelpPress }: Props) {
+  const insets = useSafeAreaInsets();
 
   return (
-    <>
-      <View style={styles.navHeader}>
-        {/* Left profile image */}
-        <Image source={require('../assets/profile.png')} style={styles.profile} />
-
-        {/* Centered logo */}
-        <View style={styles.centerContainer}>
-          <Image
-            source={require('../assets/headerLogo.png')} // <-- Your new logo here
-            style={styles.centerImage}
-            resizeMode="contain"
-          />
+    <View style={[styles.safeWrap, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <View style={styles.left}>
+          {/* TODO: replace with your logo image source */}
+          {/* <Image source={require('../assets/logo.png')} style={styles.logo} /> */}
+          <View style={styles.logoPlaceholder} />
         </View>
 
-        {/* Right help icon */}
-        <TouchableOpacity onPress={() => setHelpVisible(true)}>
-          <Image source={require('../assets/light-bulb.png')} style={styles.helpIcon} />
-        </TouchableOpacity>
+        <Pressable onPress={onHelpPress} hitSlop={12} style={styles.right}>
+          {/* TODO: replace with your lightbulb image source */}
+          {/* <Image source={require('../assets/lightbulb.png')} style={styles.bulb} /> */}
+          <View style={styles.bulbPlaceholder} />
+        </Pressable>
       </View>
-
-      {/* Help Modal */}
-      <Modal visible={helpVisible} transparent animationType="slide">
-        <View style={styles.helpOverlay}>
-          <View style={styles.helpBox}>
-            <Text style={styles.helpTitle}>{helpTitle}</Text>
-            <Text style={styles.helpText}>{helpText}</Text>
-            <Pressable style={styles.saveButton} onPress={() => setHelpVisible(false)}>
-              <Text style={styles.saveButtonText}>Got it</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  navHeader: {
+  // This is what prevents the “white above/edges” issue:
+  safeWrap: {
+    backgroundColor: '#1976D2',
+  },
+
+  // Control header height here (this fixes “blue goes too far down”):
+  header: {
+    height: 92, // tweak: try 80–96 until it matches your “original”
+    paddingHorizontal: 18,
+    paddingBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1976D2',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginBottom: 12,
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-  },
-  profile: { width: 45, height: 45, borderRadius: 25 },
 
-  // Centered container with absolute fill for perfect centering
-  centerContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 50,
-    bottom: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centerImage: {
-    height: 40, // Adjust size as needed
-    width: 160, // Adjust width for logo
-  },
-
-  helpIcon: { width: 34, height: 34 },
-
-  helpOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  helpBox: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-  },
-  helpTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  helpText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  saveButton: {
+    // If you want rounded bottom corners:
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
     backgroundColor: '#1976D2',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
   },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+
+  left: { justifyContent: 'flex-end' },
+  right: { justifyContent: 'flex-end' },
+
+  // placeholders so it compiles even before you wire images:
+  logoPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.35)' },
+  bulbPlaceholder: { width: 38, height: 38, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.35)' },
 });
+
+
+
+
+
+
+
+
 
 
 

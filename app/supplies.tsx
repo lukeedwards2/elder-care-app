@@ -56,11 +56,16 @@ export default function SuppliesScreen() {
         </View>
       </Modal>
 
+      {/* ⭐️ NEW IMAGE BUTTON */}
       <TouchableOpacity
-        style={styles.addButton}
         onPress={() => router.push('/supplyDetail')}
+        style={styles.imageButtonWrapper}
       >
-        <Text style={styles.addButtonText}>ADD PRODUCT</Text>
+        <Image
+          source={require('../assets/add_supplies_cropped.png')}
+          style={styles.imageButton}
+          resizeMode="contain"
+        />
       </TouchableOpacity>
 
       <FlatList
@@ -110,14 +115,18 @@ export default function SuppliesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  addButton: {
-    backgroundColor: '#1976D2',
-    padding: 16,
-    borderRadius: 10,
+
+  // ⭐️ NEW STYLES FOR PNG BUTTON
+  imageButtonWrapper: {
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  imageButton: {
+    width: '100%',
+    height: 85,        // adjust if needed
+  },
+
   supplyItem: {
     backgroundColor: '#f4f6f8',
     padding: 12,
@@ -188,7 +197,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
 
 
 

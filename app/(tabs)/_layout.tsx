@@ -1,19 +1,18 @@
 import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, Image, View, Text, TouchableOpacity, Linking } from 'react-native';
+import { Platform, Image, TouchableOpacity, Linking, Animated } from 'react-native';
 
 export default function TabLayout() {
   const router = useRouter();
 
-  // function to open website and return to Home
   const handleGizmosPress = async () => {
     try {
       await Linking.openURL('https://gizmosforseniors.com');
     } catch (error) {
       console.warn('Failed to open Gizmos site:', error);
     }
-    // ✅ instantly go back to Home tab
-    router.push('/home');
+    // ✅ IMPORTANT: make sure it routes to the tab home screen
+    router.push('/(tabs)/home');
   };
 
   return (
@@ -21,30 +20,41 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          height: 90,
+          height: 95,
           backgroundColor: '#1976D2',
-          paddingBottom: Platform.OS === 'ios' ? 6 : 4,
-          paddingTop: Platform.OS === 'ios' ? 6 : 4,
+          paddingBottom: Platform.OS === 'ios' ? 10 : 6,
+          paddingTop: Platform.OS === 'ios' ? 8 : 4,
         },
         tabBarLabelStyle: {
-          fontSize: 9, // ✅ slightly smaller so text stays on one line
+          fontSize: 10.5,
           fontWeight: '600',
-          color: 'white',
+          letterSpacing: 0.3,
+          marginTop: 4,
         },
         tabBarActiveTintColor: 'white',
-        tabBarInactiveTintColor: 'white',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
       }}
     >
       {/* 🏠 HOME */}
       <Tabs.Screen
         name="home"
         options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
-              <Image source={require('../../assets/home.png')} style={styles.icon} />
-              <Text style={styles.label}>Home</Text>
-            </View>
+          title: 'Home',
+          tabBarIcon: ({ focused }) => (
+            <Animated.View
+              style={[
+                styles.iconContainer,
+                { transform: [{ scale: focused ? 1.2 : 1 }] },
+              ]}
+            >
+              <Image
+                source={require('../../assets/home.png')}
+                style={[
+                  styles.icon,
+                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
+                ]}
+              />
+            </Animated.View>
           ),
         }}
       />
@@ -53,30 +63,44 @@ export default function TabLayout() {
       <Tabs.Screen
         name="schedule"
         options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
-              <Image source={require('../../assets/schedule.png')} style={styles.icon} />
-              <Text style={styles.label}>Schedule</Text>
-            </View>
+          title: 'Schedule',
+          tabBarIcon: ({ focused }) => (
+            <Animated.View
+              style={[
+                styles.iconContainer,
+                { transform: [{ scale: focused ? 1.2 : 1 }] },
+              ]}
+            >
+              <Image
+                source={require('../../assets/schedule.png')}
+                style={[
+                  styles.icon,
+                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
+                ]}
+              />
+            </Animated.View>
           ),
         }}
       />
 
-      {/* 🧭 GIZMOS (Color Image + Opens Link + Returns Home) */}
+      {/* 🧭 GIZMOS */}
       <Tabs.Screen
         name="gizmos"
         options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
+          title: 'Gizmos',
+          tabBarIcon: ({ focused }) => (
+            <Animated.View
+              style={[
+                styles.iconContainer,
+                { transform: [{ scale: focused ? 1.25 : 1 }] },
+              ]}
+            >
               <Image
                 source={require('../../assets/gizmos.png')}
-                style={[styles.icon, { width: 30, height: 30, tintColor: undefined }]} // ✅ keeps full color
+                style={[styles.icon, { width: 32, height: 32, tintColor: undefined }]}
                 resizeMode="contain"
               />
-              <Text style={styles.label}>Gizmos</Text>
-            </View>
+            </Animated.View>
           ),
           tabBarButton: (props) => (
             <TouchableOpacity {...props} onPress={handleGizmosPress} />
@@ -88,12 +112,22 @@ export default function TabLayout() {
       <Tabs.Screen
         name="news"
         options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
-              <Image source={require('../../assets/news10.png')} style={styles.icon} />
-              <Text style={styles.label}>Sr News</Text>
-            </View>
+          title: 'Sr News',
+          tabBarIcon: ({ focused }) => (
+            <Animated.View
+              style={[
+                styles.iconContainer,
+                { transform: [{ scale: focused ? 1.2 : 1 }] },
+              ]}
+            >
+              <Image
+                source={require('../../assets/news10.png')}
+                style={[
+                  styles.icon,
+                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
+                ]}
+              />
+            </Animated.View>
           ),
         }}
       />
@@ -102,15 +136,40 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: '',
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
-              <Image source={require('../../assets/user.png')} style={styles.icon} />
-              <Text style={styles.label}>Account</Text>
-            </View>
+          title: 'Account',
+          tabBarIcon: ({ focused }) => (
+            <Animated.View
+              style={[
+                styles.iconContainer,
+                { transform: [{ scale: focused ? 1.2 : 1 }] },
+              ]}
+            >
+              <Image
+                source={require('../../assets/user.png')}
+                style={[
+                  styles.icon,
+                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
+                ]}
+              />
+            </Animated.View>
           ),
         }}
       />
+
+      {/* ✅ HIDDEN “HOME ICON” SCREENS (keeps tab bar visible but removes from bottom nav) */}
+      <Tabs.Screen name="notes" options={{ href: null }} />
+      <Tabs.Screen name="subscription" options={{ href: null }} />
+
+
+      {/* (Add these later if/when those files exist inside app/(tabs)/ ) */}
+      {<Tabs.Screen name="photos" options={{ href: null }} />}
+      {<Tabs.Screen name="contacts" options={{ href: null }} />}
+      {<Tabs.Screen name="supplies" options={{ href: null }} />}
+      {<Tabs.Screen name="food" options={{ href: null }} />}
+      {<Tabs.Screen name="action" options={{ href: null }} />}
+      {<Tabs.Screen name="documents" options={{ href: null }} /> }
+      {<Tabs.Screen name="rx" options={{ href: null }} /> }
+      {<Tabs.Screen name="ambulance" options={{ href: null }} /> }
     </Tabs>
   );
 }
@@ -119,18 +178,11 @@ const styles = {
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
   },
   icon: {
-    width: 24,
-    height: 24,
-    marginBottom: 0,
-    tintColor: 'white',
-  },
-  label: {
-    color: 'white',
-    fontSize: 6, // ✅ smaller font fits one line
-    fontWeight: '600',
+    width: 26,
+    height: 26,
+    marginBottom: 2,
   },
 };
 
