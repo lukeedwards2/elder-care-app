@@ -38,8 +38,6 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <NavHeader
-        helpTitle="Home Help"
-        helpText="This is your home screen. Tap any icon to manage caregiving tasks like notes, contacts, or medicine reminders."
       />
 
       <FlatList

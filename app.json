@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.seriously.carekeeperhub",
-      "buildNumber": "1.1.5",
+      "buildNumber": "1.1.7",
       "supportsTablet": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

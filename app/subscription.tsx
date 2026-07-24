@@ -12,8 +12,7 @@ import {
 import NavHeader from '../components/NavHeader';
 
 // ✅ REAL IAP (required for App Review)
-import * as InAppPurchases from 'expo-in-app-purchases';
-
+//import * as InAppPurchases from 'expo-in-app-purchases';
 type IAPProduct = {
   productId: string;
   title?: string;
