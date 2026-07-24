@@ -4,6 +4,7 @@
   },
   "build": {
     "production": {
+      "npm": "11.13.0",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://zgxaldtqtvaloulhdmyw.supabase.co",
