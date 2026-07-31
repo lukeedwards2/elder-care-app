@@ -369,7 +369,187 @@ Backup eas.json:
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {}                                                   ns
     }
+  }
+}.                                                  
+
+
+
+Backup _layout:
+
+// app/_layout.tsx
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import 'react-native-reanimated';
+
+import { useColorScheme } from '@/hooks/useColorScheme';
+
+// Keep splash until fonts are loaded
+SplashScreen.preventAutoHideAsync().catch(() => {
+  /* ignore if already hidden */
+});
+
+export default function RootLayout() {
+  const colorScheme = useColorScheme();
+  const [loaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loaded]);
+
+  if (!loaded) return null;
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* Auth gate lives in app/index.tsx */}
+        <Stack.Screen name="index" />
+
+        {/* Auth screens */}
+        <Stack.Screen name="login" />
+        <Stack.Screen name="signup" />
+        <Stack.Screen name="profileInfo" />
+
+        {/* Main tabbed app */}
+        <Stack.Screen name="(tabs)" />
+
+        {/* Other top-level screens still work */}
+        <Stack.Screen name="+not-found" />
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
+
+
+
+Backup Index:
+
+// app/index.tsx
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { Redirect } from 'expo-router';
+import { getSessionSafe } from '../lib/supabase';
+
+export default function Index() {
+  const [checking, setChecking] = useState(true);
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const session = await getSessionSafe();
+        setLoggedIn(!!session);
+      } finally {
+        setChecking(false);
+      }
+    })();
+  }, []);
+
+  if (checking) {
+    // Small loading screen while we check Supabase session
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  // If logged in, go to Home tab; otherwise go to Login
+  if (loggedIn) {
+    return <Redirect href="/(tabs)/home" />;
+  }
+
+  return <Redirect href="/login" />;
+}
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+
+
+
+
+Backup Lib supabase:
+
+// lib/supabase.ts
+import { createClient, Session } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+// ✅ Never throw at module import time (prevents TestFlight launch crashes)
+export function assertSupabaseConfigured(): { ok: true } | { ok: false; message: string } {
+  if (isConfigured) return { ok: true };
+  return {
+    ok: false,
+    message:
+      'Supabase env vars are missing in this build.\n\nMake sure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set for your EAS production build.',
+  };
+}
+
+// Create a client even if missing env vars (so imports don’t crash the app)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+});
+
+// --- ✅ Crash-prevention: keep a cached session in memory ---
+let cachedSession: Session | null = null;
+
+// Bootstrap once (don’t crash even if misconfigured)
+(async () => {
+  try {
+    if (!isConfigured) return;
+    const { data, error } = await supabase.auth.getSession();
+    if (!error) cachedSession = data.session ?? null;
+  } catch (e) {
+    console.error('Supabase bootstrap session error:', e);
+  }
+})();
+
+// Keep cache updated on login/logout/token refresh
+supabase.auth.onAuthStateChange((_event, session) => {
+  cachedSession = session;
+});
+
+/**
+ * Safe helper to get the current auth session.
+ * Never throws – returns Session | null.
+ */
+export async function getSessionSafe(): Promise<Session | null> {
+  try {
+    if (!isConfigured) return null;
+    if (cachedSession) return cachedSession;
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error getting Supabase session:', error);
+      return null;
+    }
+
+    cachedSession = data.session ?? null;
+    return cachedSession;
+  } catch (e) {
+    console.error('Unexpected error in getSessionSafe:', e);
+    return null;
   }
 }

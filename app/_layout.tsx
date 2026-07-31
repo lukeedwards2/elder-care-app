@@ -1,5 +1,10 @@
 // app/_layout.tsx
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -9,32 +14,40 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-// Keep splash until fonts are loaded
+// Keep the splash screen visible while startup resources load.
 SplashScreen.preventAutoHideAsync().catch(() => {
-  /* ignore if already hidden */
+  // Ignore the error if the splash screen was already prevented from hiding.
 });
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
+
+  const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
   useEffect(() => {
-    if (loaded) {
+    // Continue into the app whether the font loads successfully
+    // or encounters an error. This prevents a permanent blank screen.
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!loaded) return null;
+  // Wait only while the font is still actively loading.
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider
+      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+    >
       <Stack screenOptions={{ headerShown: false }}>
-        {/* Auth gate lives in app/index.tsx */}
+        {/* Auth gate */}
         <Stack.Screen name="index" />
 
-        {/* Auth screens */}
+        {/* Authentication screens */}
         <Stack.Screen name="login" />
         <Stack.Screen name="signup" />
         <Stack.Screen name="profileInfo" />
@@ -42,9 +55,10 @@ export default function RootLayout() {
         {/* Main tabbed app */}
         <Stack.Screen name="(tabs)" />
 
-        {/* Other top-level screens still work */}
+        {/* Fallback */}
         <Stack.Screen name="+not-found" />
       </Stack>
+
       <StatusBar style="auto" />
     </ThemeProvider>
   );

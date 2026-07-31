@@ -1,5 +1,6 @@
 // firebase.js
-import { initializeApp } from 'firebase/app';
+
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
@@ -8,11 +9,22 @@ const firebaseConfig = {
   databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  messagingSenderId:
+    process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const missingFirebaseValues = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
 
-export { db };
+if (missingFirebaseValues.length > 0) {
+  console.error(
+    `Firebase configuration is missing: ${missingFirebaseValues.join(', ')}`
+  );
+}
+
+// Avoid initializing Firebase more than once during development reloads.
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+export const db = getDatabase(app);
