@@ -45,7 +45,7 @@ export function assertSupabaseConfigured():
       'EXPO_PUBLIC_SUPABASE_ANON_KEY are available in the ' +
       'EAS production environment.',
   };
-}
+} 
 
 export const supabase = createClient(
   supabaseUrl,
