@@ -1,150 +1,256 @@
-import React, { useEffect, useState } from 'react';
+// app/documents.tsx
+
+import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, Modal,
-  TextInput, Pressable, Alert, Image
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Modal,
+  Pressable,
 } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import NavHeader from '../components/NavHeader';
+
+type StoredDocument = {
+  title: string;
+  description: string;
+  uri: string;
+  fileName?: string;
+  mimeType?: string;
+};
+
+const STORAGE_KEY = 'stored_documents';
 
 export default function DocumentsScreen() {
-  const [documents, setDocuments] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [helpVisible, setHelpVisible] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [fileUri, setFileUri] = useState(null);
-  const [editingIndex, setEditingIndex] = useState(null);
-  const router = useRouter();
-  const STORAGE_KEY = 'stored_documents';
 
-  useEffect(() => {
-    loadDocuments();
+  const router = useRouter();
+
+  const loadDocuments = useCallback(async () => {
+    try {
+      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+
+      if (!saved) {
+        setDocuments([]);
+        return;
+      }
+
+      const parsed = JSON.parse(saved);
+      setDocuments(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.log('Failed to load documents:', error);
+      setDocuments([]);
+    }
   }, []);
 
-  const loadDocuments = async () => {
-    const saved = await AsyncStorage.getItem(STORAGE_KEY);
-    if (saved) setDocuments(JSON.parse(saved));
-  };
+  // Reload whenever we return from adding, editing, or deleting.
+  useFocusEffect(
+    useCallback(() => {
+      loadDocuments();
+    }, [loadDocuments])
+  );
 
-  const saveDocuments = async (updated) => {
-    setDocuments(updated);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  };
-
-  const openModal = () => {
-    setTitle('');
-    setDescription('');
-    setFileUri(null);
-    setEditingIndex(null);
-    setModalVisible(true);
-  };
-
-  const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
-      multiple: false,
-      type: ['application/pdf', 'image/*'],
+  const openAddDocument = () => {
+    router.push({
+      pathname: '/(tabs)/documentDetail',
+      params: {
+        mode: 'add',
+        resetKey: Date.now().toString(),
+      },
     });
-    if (!result.canceled) {
-      setFileUri(result.assets[0].uri);
-    }
   };
 
-  const saveDocument = () => {
-    if (!title || !description || !fileUri) {
-      Alert.alert('Missing Fields', 'Please complete all fields and attach a document.');
-      return;
+  const openDocument = (item: StoredDocument, index: number) => {
+    router.push({
+      pathname: '/(tabs)/documentDetail',
+      params: {
+        mode: 'view',
+        index: String(index),
+        title: item.title,
+        description: item.description,
+        uri: item.uri,
+        fileName: item.fileName ?? '',
+        mimeType: item.mimeType ?? '',
+      },
+    });
+  };
+
+  const getFileIcon = (document: StoredDocument) => {
+    if (
+      document.mimeType?.includes('pdf') ||
+      document.fileName?.toLowerCase().endsWith('.pdf')
+    ) {
+      return 'document-text-outline';
     }
 
-    const newDoc = { title, description, uri: fileUri };
-    const updated =
-      editingIndex !== null
-        ? documents.map((doc, i) => (i === editingIndex ? newDoc : doc))
-        : [...documents, newDoc];
+    if (document.mimeType?.includes('image')) {
+      return 'image-outline';
+    }
 
-    saveDocuments(updated);
-    setModalVisible(false);
+    return 'document-outline';
   };
+
+  const renderDocument = ({
+    item,
+    index,
+  }: {
+    item: StoredDocument;
+    index: number;
+  }) => (
+    <TouchableOpacity
+      style={styles.documentCard}
+      activeOpacity={0.82}
+      onPress={() => openDocument(item, index)}
+    >
+      <View style={styles.documentIcon}>
+        <Ionicons
+          name={getFileIcon(item)}
+          size={31}
+          color="#1976D2"
+        />
+      </View>
+
+      <View style={styles.documentInfo}>
+        <Text style={styles.documentTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+
+        {!!item.description && (
+          <Text style={styles.documentDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
+
+        <View style={styles.fileRow}>
+          <Ionicons
+            name="attach-outline"
+            size={15}
+            color="#718092"
+          />
+
+          <Text style={styles.fileText} numberOfLines={1}>
+            {item.fileName || 'Attached document'}
+          </Text>
+        </View>
+      </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={22}
+        color="#AAB3BE"
+      />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.navHeader}>
-        <Image source={require('../assets/profile.jpg')} style={styles.profile} />
-        <View style={styles.navTitleGroup}>
-          <Text style={styles.navTitle}>Taking care of</Text>
-          <Text style={styles.navSubtitle}>Mom</Text>
+      <NavHeader />
+
+      <View style={styles.content}>
+        <View style={styles.pageHeading}>
+          <View style={styles.headingText}>
+            <Text style={styles.pageTitle}>Documents</Text>
+
+            <Text style={styles.pageSubtitle}>
+              Keep important records and files easy to find.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.helpButton}
+            activeOpacity={0.8}
+            onPress={() => setHelpVisible(true)}
+          >
+            <Text style={styles.helpQuestion}>?</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => setHelpVisible(true)}>
-          <Image source={require('../assets/light-bulb.png')} style={styles.helpIcon} />
+
+        <TouchableOpacity
+          style={styles.addButton}
+          activeOpacity={0.85}
+          onPress={openAddDocument}
+        >
+          <Ionicons
+            name="add"
+            size={26}
+            color="#fff"
+          />
+
+          <Text style={styles.addButtonText}>
+            ADD DOCUMENT
+          </Text>
         </TouchableOpacity>
+
+        <FlatList
+          data={documents}
+          keyExtractor={(_, index) => index.toString()}
+          renderItem={renderDocument}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.listContent,
+            documents.length === 0 && styles.emptyListContent,
+          ]}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="documents-outline"
+                  size={36}
+                  color="#1976D2"
+                />
+              </View>
+
+              <Text style={styles.emptyTitle}>
+                No documents yet
+              </Text>
+
+              <Text style={styles.emptyText}>
+                Store prescriptions, discharge papers, insurance
+                information, appointment notes, and other important files.
+              </Text>
+            </View>
+          }
+        />
       </View>
 
-      {/* Help Modal */}
-      <Modal visible={helpVisible} transparent animationType="slide">
-        <View style={styles.helpOverlay}>
-          <View style={styles.helpBox}>
-            <Text style={styles.helpTitle}>Documents Page</Text>
-            <Text style={styles.helpText}>
-              This page allows you to upload and store important documents like prescriptions, discharge papers, or notes from appointments. Tap on a document row to view or edit details.
-            </Text>
-            <Pressable style={styles.saveButton} onPress={() => setHelpVisible(false)}>
-              <Text style={styles.saveButtonText}>Got it</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <TouchableOpacity style={styles.addButton} onPress={openModal}>
-        <Text style={styles.addButtonText}>ADD DOCUMENT</Text>
-      </TouchableOpacity>
-
-      <FlatList
-        data={documents}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.documentItem}
-            onPress={() =>
-              router.push({
-                pathname: '/documentDetail',
-                params: { ...item, index },
-              })
-            }
-          >
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.description}>{item.description}</Text>
-          </TouchableOpacity>
-        )}
-      />
-
-      <Modal visible={modalVisible} animationType="slide" transparent>
+      <Modal
+        visible={helpVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHelpVisible(false)}
+      >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalHeader}>
-              {editingIndex !== null ? 'Edit Document' : 'New Document'}
+          <View style={styles.helpBox}>
+            <View style={styles.helpIconCircle}>
+              <Ionicons
+                name="documents-outline"
+                size={30}
+                color="#1976D2"
+              />
+            </View>
+
+            <Text style={styles.helpTitle}>
+              Documents
             </Text>
-            <TextInput
-              placeholder="Document Title"
-              style={styles.input}
-              value={title}
-              onChangeText={setTitle}
-            />
-            <TextInput
-              placeholder="Description"
-              style={styles.input}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-            <Pressable style={styles.attachButton} onPress={pickFile}>
-              <Text style={styles.attachButtonText}>
-                {fileUri ? 'Change File' : 'Attach Document'}
+
+            <Text style={styles.helpText}>
+              Keep important caregiving documents in one place.
+              Add a title and description, then attach a PDF or image.
+              Tap any saved document to view, edit, or delete it.
+            </Text>
+
+            <Pressable
+              style={styles.gotItButton}
+              onPress={() => setHelpVisible(false)}
+            >
+              <Text style={styles.gotItButtonText}>
+                Got it
               </Text>
-            </Pressable>
-            <Pressable style={styles.saveButton} onPress={saveDocument}>
-              <Text style={styles.saveButtonText}>Save Document</Text>
             </Pressable>
           </View>
         </View>
@@ -154,108 +260,245 @@ export default function DocumentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  navHeader: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F7F9FC',
+  },
+
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+
+  pageHeading: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1976D2',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    marginBottom: 16,
-    justifyContent: 'space-between',
+    marginBottom: 18,
   },
-  profile: { width: 50, height: 50, borderRadius: 25 },
-  navTitleGroup: { alignItems: 'center', flex: 1 },
-  navTitle: { color: '#fff', fontSize: 14 },
-  navSubtitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  helpIcon: { width: 26, height: 26 },
-  helpOverlay: {
+
+  headingText: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    paddingRight: 12,
   },
-  helpBox: {
+
+  pageTitle: {
+    fontSize: 29,
+    lineHeight: 35,
+    fontWeight: '800',
+    color: '#17202B',
+  },
+
+  pageSubtitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#7A8694',
+    marginTop: 2,
+  },
+
+  helpButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#D8DEE6',
     backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
-    maxWidth: 350,
-    width: '100%',
-  },
-  helpTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  helpText: {
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  addButton: {
-    backgroundColor: '#1976D2',
-    padding: 16,
-    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  helpQuestion: {
+    fontSize: 25,
+    color: '#1976D2',
+    fontWeight: '700',
+  },
+
+  addButton: {
+    minHeight: 60,
+    borderRadius: 18,
+    backgroundColor: '#1976D2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+
+    shadowColor: '#1976D2',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 3,
+  },
+
+  addButtonText: {
+    marginLeft: 4,
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+
+  listContent: {
+    paddingBottom: 28,
+  },
+
+  emptyListContent: {
+    flexGrow: 1,
+  },
+
+  documentCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E1E6ED',
+    padding: 15,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+
+    elevation: 2,
+  },
+
+  documentIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 18,
+    backgroundColor: '#EAF3FC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+
+  documentInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
+  documentTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#17202B',
+  },
+
+  documentDescription: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: '#717E8D',
+    marginTop: 4,
+  },
+
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 9,
+  },
+
+  fileText: {
+    flex: 1,
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#718092',
+  },
+
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 34,
+    paddingBottom: 80,
+  },
+
+  emptyIcon: {
+    width: 78,
+    height: 78,
+    borderRadius: 25,
+    backgroundColor: '#EAF3FC',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
-  addButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  documentItem: {
-    backgroundColor: '#eee',
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 12,
+
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#17202B',
   },
-  title: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  description: { fontSize: 14, color: '#555' },
+
+  emptyText: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#7A8694',
+  },
+
   modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(15, 23, 32, 0.46)',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 20,
+    alignItems: 'center',
+    padding: 22,
   },
-  modalContent: {
+
+  helpBox: {
+    width: '100%',
+    maxWidth: 390,
+    borderRadius: 24,
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-  },
-  modalHeader: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 12,
-  },
-  attachButton: {
-    backgroundColor: '#ccc',
-    padding: 10,
-    borderRadius: 6,
+    padding: 24,
     alignItems: 'center',
-    marginBottom: 16,
   },
-  attachButtonText: {
-    fontWeight: 'bold',
-    color: '#333',
+
+  helpIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 21,
+    backgroundColor: '#EAF3FC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 13,
   },
-  saveButton: {
+
+  helpTitle: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: '#17202B',
+    marginBottom: 8,
+  },
+
+  helpText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#667383',
+    textAlign: 'center',
+  },
+
+  gotItButton: {
+    width: '100%',
+    marginTop: 22,
+    minHeight: 50,
+    borderRadius: 14,
     backgroundColor: '#1976D2',
-    padding: 14,
-    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  saveButtonText: {
+
+  gotItButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
 

@@ -5,56 +5,168 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  Dimensions,
   FlatList,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import NavHeader from '@/components/NavHeader';
 
-const { width, height } = Dimensions.get('window');
-
-// Dynamic scaling so icons and spacing adjust for different screen sizes
-const baseWidth = 390; // reference iPhone 14 width
-const scale = width / baseWidth;
-const iconSize = width * 0.17 * scale;
-
 const menuItems = [
-  { title: 'Notes', image: require('../../assets/notes.png'), route: '/(tabs)/notes' },
-  { title: 'Contacts', image: require('../../assets/contacts.png'), route: '/(tabs)/contacts' },
-  { title: 'Chat', image: require('../../assets/photos.png'), route: '/(tabs)/photos' },
-  { title: 'Supplies', image: require('../../assets/supplies.png'), route: '/(tabs)/supplies' },
-  { title: 'Food', image: require('../../assets/food.png'), route: '/(tabs)/food' },
-  { title: 'Action Needed', image: require('../../assets/action.png'), route: '/(tabs)/action' },
-  { title: 'Documents', image: require('../../assets/documents.png'), route: '/(tabs)/documents' },
-  { title: 'Rx', image: require('../../assets/rx.png'), route: '/(tabs)/rx' },
-  { title: 'Emergency', image: require('../../assets/ambulance.png'), route: '/(tabs)/ambulance' },
+  {
+    title: 'Notes',
+    image: require('../../assets/notes.png'),
+    route: '/(tabs)/notes',
+  },
+  {
+    title: 'Contacts',
+    image: require('../../assets/contacts.png'),
+    route: '/(tabs)/contacts',
+  },
+  {
+    title: 'Chat',
+    image: require('../../assets/photos.png'),
+    route: '/(tabs)/photos',
+  },
+  {
+    title: 'Supplies',
+    image: require('../../assets/supplies.png'),
+    route: '/(tabs)/supplies',
+  },
+  {
+    title: 'Food',
+    image: require('../../assets/food.png'),
+    route: '/(tabs)/food',
+  },
+  {
+    title: 'Action Needed',
+    image: require('../../assets/action.png'),
+    route: '/(tabs)/action',
+  },
+  {
+    title: 'Documents',
+    image: require('../../assets/documents.png'),
+    route: '/(tabs)/documents',
+  },
+  {
+    title: 'Rx',
+    image: require('../../assets/rx.png'),
+    route: '/(tabs)/rx',
+  },
+  {
+    title: 'Emergency',
+    image: require('../../assets/ambulance.png'),
+    route: '/(tabs)/ambulance',
+  },
 ];
-
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
+
+  const isTablet = width >= 768;
+
+  /*
+   * iPhone:
+   * Keep the grid close to the current design.
+   *
+   * iPad:
+   * Allow the grid to use much more of the available width,
+   * but still cap it so icons never become enormous.
+   */
+  const gridWidth = isTablet
+    ? Math.min(width * 0.9, 940)
+    : width;
+
+  const itemWidth = gridWidth / 3;
+
+  /*
+   * Let tablet icons be somewhat larger than before,
+   * while still keeping a hard maximum.
+   */
+  const iconSize = isTablet
+    ? Math.min(itemWidth * 0.4, 115)
+    : Math.min(width * 0.17, 72);
+
+  const labelSize = isTablet
+    ? 20
+    : Math.min(width * 0.039, 16);
+
+  /*
+   * iPhone keeps its familiar spacing.
+   *
+   * Tablet rows will be vertically distributed using
+   * justifyContent: 'space-evenly' below.
+   */
+  const phoneVerticalSpacing = Math.min(height * 0.038, 34);
+
+  const phoneTopPadding = Math.min(height * 0.055, 46);
 
   return (
     <View style={styles.container}>
-      <NavHeader
-      />
+      <NavHeader />
 
       <FlatList
         data={menuItems}
         numColumns={3}
         keyExtractor={(item) => item.title}
-        contentContainerStyle={styles.grid}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.grid,
+          {
+            width: gridWidth,
+          },
+          isTablet
+            ? styles.tabletGrid
+            : {
+                paddingTop: phoneTopPadding,
+                paddingBottom: 24,
+              },
+        ]}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.menuItem}
+            style={[
+              styles.menuItem,
+              {
+                width: itemWidth,
+              },
+              !isTablet && {
+                marginVertical: phoneVerticalSpacing,
+              },
+            ]}
             onPress={() => router.push(item.route)}
             activeOpacity={0.8}
           >
-            <View style={styles.iconWrapper}>
-              <Image source={item.image} style={styles.icon} resizeMode="contain" />
+            <View
+              style={[
+                styles.iconWrapper,
+                {
+                  width: iconSize * 1.1,
+                  height: iconSize * 1.1,
+                },
+              ]}
+            >
+              <Image
+                source={item.image}
+                style={{
+                  width: iconSize,
+                  height: iconSize,
+                }}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.label}>{item.title}</Text>
+
+            <Text
+              style={[
+                styles.label,
+                {
+                  fontSize: labelSize,
+                },
+              ]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
           </TouchableOpacity>
         )}
       />
@@ -67,38 +179,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+
   grid: {
-    paddingTop: height * 0.06 * scale,
-    paddingBottom: height * 0.02 * scale,
-    paddingHorizontal: width * 0.04,
-    justifyContent: 'center',
+    alignSelf: 'center',
     alignItems: 'center',
   },
+
+  /*
+   * This is the major iPad improvement.
+   *
+   * flexGrow makes the FlatList content fill the available
+   * vertical area between the header and bottom tabs.
+   *
+   * space-evenly spreads the three rows through that area
+   * rather than stacking them near the top.
+   */
+  tabletGrid: {
+    flexGrow: 1,
+    justifyContent: 'space-evenly',
+    paddingVertical: 24,
+  },
+
   menuItem: {
-    width: width / 3.3,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: height * 0.035 * scale, // vertical spacing unchanged
+    paddingHorizontal: 8,
   },
+
   iconWrapper: {
-    width: iconSize * 1.1,
-    height: iconSize * 1.1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    width: iconSize,
-    height: iconSize,
-  },
+
   label: {
-    marginTop: 8 * scale,
+    marginTop: 8,
     textAlign: 'center',
     fontWeight: '600',
-    fontSize: width * 0.039,
     color: '#000',
     fontFamily: Platform.select({
-      ios: 'Avenir Next', // ✅ modern, sleek, professional iOS font
-      android: 'sans-serif-light', // ✅ clean Android alternative
+      ios: 'Avenir Next',
+      android: 'sans-serif-light',
     }),
   },
 });

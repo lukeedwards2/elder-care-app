@@ -40,7 +40,8 @@
         }
       ],
       "expo-asset",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

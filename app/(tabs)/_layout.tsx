@@ -1,9 +1,25 @@
 import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, Image, TouchableOpacity, Linking, Animated } from 'react-native';
+import {
+  Platform,
+  Image,
+  TouchableOpacity,
+  Linking,
+  Animated,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native';
 
 export default function TabLayout() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+
+  const isTablet = width >= 768;
+
+  const tabBarHeight = isTablet ? 88 : 95;
+  const iconSize = isTablet ? 31 : 26;
+  const gizmosIconSize = isTablet ? 36 : 32;
+  const labelSize = isTablet ? 13 : 10.5;
 
   const handleGizmosPress = async () => {
     try {
@@ -11,180 +27,201 @@ export default function TabLayout() {
     } catch (error) {
       console.warn('Failed to open Gizmos site:', error);
     }
-    // ✅ IMPORTANT: make sure it routes to the tab home screen
-    router.push('/(tabs)/home');
+
+    router.replace('/(tabs)/home');
   };
+
+  const renderTintedIcon = (
+    source: any,
+    focused: boolean,
+    size = iconSize
+  ) => (
+    <Animated.View
+      style={[
+        styles.iconContainer,
+        {
+          transform: [{ scale: focused ? 1.15 : 1 }],
+        },
+      ]}
+    >
+      <Image
+        source={source}
+        style={[
+          styles.icon,
+          {
+            width: size,
+            height: size,
+            tintColor: focused
+              ? '#FFFFFF'
+              : 'rgba(255,255,255,0.62)',
+          },
+        ]}
+        resizeMode="contain"
+      />
+    </Animated.View>
+  );
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+
         tabBarStyle: {
-          height: 95,
+          height: tabBarHeight,
           backgroundColor: '#1976D2',
-          paddingBottom: Platform.OS === 'ios' ? 10 : 6,
-          paddingTop: Platform.OS === 'ios' ? 8 : 4,
+          borderTopWidth: 0,
+          paddingTop: isTablet
+            ? 9
+            : Platform.OS === 'ios'
+              ? 8
+              : 4,
+          paddingBottom: isTablet
+            ? 10
+            : Platform.OS === 'ios'
+              ? 10
+              : 6,
         },
+
+        tabBarItemStyle: {
+          paddingVertical: isTablet ? 3 : 0,
+        },
+
         tabBarLabelStyle: {
-          fontSize: 10.5,
+          fontSize: labelSize,
           fontWeight: '600',
-          letterSpacing: 0.3,
-          marginTop: 4,
+          letterSpacing: isTablet ? 0.2 : 0.3,
+          marginTop: isTablet ? 5 : 4,
         },
-        tabBarActiveTintColor: 'white',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
+
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.62)',
       }}
     >
-      {/* 🏠 HOME */}
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => (
-            <Animated.View
-              style={[
-                styles.iconContainer,
-                { transform: [{ scale: focused ? 1.2 : 1 }] },
-              ]}
-            >
-              <Image
-                source={require('../../assets/home.png')}
-                style={[
-                  styles.icon,
-                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
-                ]}
-              />
-            </Animated.View>
-          ),
+          tabBarIcon: ({ focused }) =>
+            renderTintedIcon(
+              require('../../assets/home.png'),
+              focused
+            ),
         }}
       />
 
-      {/* 🗓️ SCHEDULE */}
       <Tabs.Screen
         name="schedule"
         options={{
           title: 'Schedule',
-          tabBarIcon: ({ focused }) => (
-            <Animated.View
-              style={[
-                styles.iconContainer,
-                { transform: [{ scale: focused ? 1.2 : 1 }] },
-              ]}
-            >
-              <Image
-                source={require('../../assets/schedule.png')}
-                style={[
-                  styles.icon,
-                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
-                ]}
-              />
-            </Animated.View>
-          ),
+          tabBarIcon: ({ focused }) =>
+            renderTintedIcon(
+              require('../../assets/schedule.png'),
+              focused
+            ),
         }}
       />
 
-      {/* 🧭 GIZMOS */}
       <Tabs.Screen
         name="gizmos"
         options={{
           title: 'Gizmos',
+
           tabBarIcon: ({ focused }) => (
             <Animated.View
               style={[
                 styles.iconContainer,
-                { transform: [{ scale: focused ? 1.25 : 1 }] },
+                {
+                  transform: [{ scale: focused ? 1.15 : 1 }],
+                },
               ]}
             >
               <Image
                 source={require('../../assets/gizmos.png')}
-                style={[styles.icon, { width: 32, height: 32, tintColor: undefined }]}
+                style={{
+                  width: gizmosIconSize,
+                  height: gizmosIconSize,
+                }}
                 resizeMode="contain"
               />
             </Animated.View>
           ),
+
           tabBarButton: (props) => (
-            <TouchableOpacity {...props} onPress={handleGizmosPress} />
+            <TouchableOpacity
+              {...props}
+              onPress={handleGizmosPress}
+              activeOpacity={0.7}
+            />
           ),
         }}
       />
 
-      {/* 📰 SR NEWS */}
       <Tabs.Screen
         name="news"
         options={{
           title: 'Sr News',
-          tabBarIcon: ({ focused }) => (
-            <Animated.View
-              style={[
-                styles.iconContainer,
-                { transform: [{ scale: focused ? 1.2 : 1 }] },
-              ]}
-            >
-              <Image
-                source={require('../../assets/news10.png')}
-                style={[
-                  styles.icon,
-                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
-                ]}
-              />
-            </Animated.View>
-          ),
+          tabBarIcon: ({ focused }) =>
+            renderTintedIcon(
+              require('../../assets/news10.png'),
+              focused
+            ),
         }}
       />
 
-      {/* 👤 ACCOUNT */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Account',
-          tabBarIcon: ({ focused }) => (
-            <Animated.View
-              style={[
-                styles.iconContainer,
-                { transform: [{ scale: focused ? 1.2 : 1 }] },
-              ]}
-            >
-              <Image
-                source={require('../../assets/user.png')}
-                style={[
-                  styles.icon,
-                  { tintColor: focused ? 'white' : 'rgba(255,255,255,0.6)' },
-                ]}
-              />
-            </Animated.View>
-          ),
+          tabBarIcon: ({ focused }) =>
+            renderTintedIcon(
+              require('../../assets/user.png'),
+              focused
+            ),
         }}
       />
 
-      {/* ✅ HIDDEN “HOME ICON” SCREENS (keeps tab bar visible but removes from bottom nav) */}
+      <Tabs.Screen
+  name="newsDetail"
+  options={{
+    href: null,
+  }}
+/>
+
+      {/* Hidden tab routes */}
       <Tabs.Screen name="notes" options={{ href: null }} />
+      <Tabs.Screen name="addNote" options={{ href: null }} />
+      <Tabs.Screen name="noteDetail" options={{ href: null }} />
+
       <Tabs.Screen name="subscription" options={{ href: null }} />
-
-
-      {/* (Add these later if/when those files exist inside app/(tabs)/ ) */}
-      {<Tabs.Screen name="photos" options={{ href: null }} />}
-      {<Tabs.Screen name="contacts" options={{ href: null }} />}
-      {<Tabs.Screen name="supplies" options={{ href: null }} />}
-      {<Tabs.Screen name="food" options={{ href: null }} />}
-      {<Tabs.Screen name="action" options={{ href: null }} />}
-      {<Tabs.Screen name="documents" options={{ href: null }} /> }
-      {<Tabs.Screen name="rx" options={{ href: null }} /> }
-      {<Tabs.Screen name="ambulance" options={{ href: null }} /> }
+      <Tabs.Screen name="photos" options={{ href: null }} />
+      <Tabs.Screen name="contacts" options={{ href: null }} />
+      <Tabs.Screen name="contactForm" options={{ href: null }} />
+      <Tabs.Screen name="contactDetail" options={{ href: null }} />
+      <Tabs.Screen name="supplies" options={{ href: null }} />
+      <Tabs.Screen name="supplyDetail" options={{ href: null }} />
+      <Tabs.Screen name="food" options={{ href: null }} />
+      <Tabs.Screen name="foodDetail" options={{ href: null }} />
+      <Tabs.Screen name="action" options={{ href: null }} />
+      <Tabs.Screen name="documents" options={{ href: null }} />
+      <Tabs.Screen name="documentDetail" options={{ href: null }} />
+      <Tabs.Screen name="rx" options={{ href: null }} />
+      <Tabs.Screen name="rxDetail" options={{ href: null }} />
+      <Tabs.Screen name="ambulance" options={{ href: null }} />
+      <Tabs.Screen name="ambulanceForm" options={{ href: null }} />
     </Tabs>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   icon: {
-    width: 26,
-    height: 26,
     marginBottom: 2,
   },
-};
+});
 
 
 
