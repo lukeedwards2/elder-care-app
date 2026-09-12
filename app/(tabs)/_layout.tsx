@@ -3,7 +3,6 @@ import React from 'react';
 import {
   Platform,
   Image,
-  TouchableOpacity,
   Linking,
   Animated,
   StyleSheet,
@@ -122,39 +121,37 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="gizmos"
-        options={{
-          title: 'Gizmos',
+  name="gizmos"
+  options={{
+    title: 'Gizmos',
 
-          tabBarIcon: ({ focused }) => (
-            <Animated.View
-              style={[
-                styles.iconContainer,
-                {
-                  transform: [{ scale: focused ? 1.15 : 1 }],
-                },
-              ]}
-            >
-              <Image
-                source={require('../../assets/gizmos.png')}
-                style={{
-                  width: gizmosIconSize,
-                  height: gizmosIconSize,
-                }}
-                resizeMode="contain"
-              />
-            </Animated.View>
-          ),
-
-          tabBarButton: (props) => (
-            <TouchableOpacity
-              {...props}
-              onPress={handleGizmosPress}
-              activeOpacity={0.7}
-            />
-          ),
-        }}
-      />
+    tabBarIcon: ({ focused }) => (
+      <Animated.View
+        style={[
+          styles.iconContainer,
+          {
+            transform: [{ scale: focused ? 1.15 : 1 }],
+          },
+        ]}
+      >
+        <Image
+          source={require('../../assets/gizmos.png')}
+          style={{
+            width: gizmosIconSize,
+            height: gizmosIconSize,
+          }}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    ),
+  }}
+  listeners={{
+    tabPress: (event) => {
+      event.preventDefault();
+      void handleGizmosPress();
+    },
+  }}
+/>
 
       <Tabs.Screen
         name="news"
@@ -180,14 +177,13 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-  name="newsDetail"
-  options={{
-    href: null,
-  }}
-/>
-
       {/* Hidden tab routes */}
+      <Tabs.Screen name="newsDetail" options={{ href: null }} />
+      <Tabs.Screen name="profileInfo" options={{ href: null }} />
+      <Tabs.Screen name="team-members" options={{ href: null }} />
+      <Tabs.Screen name="aboutUs" options={{ href: null }} />
+      <Tabs.Screen name="contactUs" options={{ href: null }} />
+
       <Tabs.Screen name="notes" options={{ href: null }} />
       <Tabs.Screen name="addNote" options={{ href: null }} />
       <Tabs.Screen name="noteDetail" options={{ href: null }} />

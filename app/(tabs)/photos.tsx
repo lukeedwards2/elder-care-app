@@ -1,3 +1,5 @@
+// app/(tabs)/photos.tsx
+
 import React, {
   useCallback,
   useEffect,
@@ -25,35 +27,34 @@ import {
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import NavHeader from '@/components/NavHeader';
 import {
-  onValue,
-  push,
-  ref,
-} from 'firebase/database';
-
-import NavHeader from '../../components/NavHeader';
-import { db } from '../../firebase';
-import { getSessionSafe } from '../../lib/supabase';
+  getSessionSafe,
+  supabase,
+} from '@/lib/supabase';
 
 type ChatMessage = {
   id: string;
-  text: string;
-  senderId: string;
-  senderName: string;
-  timestamp: string;
+  team_owner_id: string;
+  sender_id: string;
+  sender_name: string;
+  message: string;
+  created_at: string;
 };
 
-type LegacyChatMessage = {
-  id?: string;
-  text?: string;
-  sender?: string;
-  senderId?: string;
-  senderName?: string;
-  timestamp?: string;
+type ProfileRecord = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
 };
 
-const MESSAGES_KEY = 'stored_chat_messages';
-const CHAT_PATH = 'messages';
+type TeamMembership = {
+  owner_id: string;
+  created_at: string | null;
+};
+
+const MESSAGE_LIMIT = 1000;
 
 export default function ChatScreen() {
   const { width } = useWindowDimensions();
@@ -66,13 +67,17 @@ export default function ChatScreen() {
   const [messages, setMessages] =
     useState<ChatMessage[]>([]);
 
-  const [input, setInput] = useState('');
+  const [input, setInput] =
+    useState('');
 
   const [currentUserId, setCurrentUserId] =
     useState('');
 
   const [currentUserName, setCurrentUserName] =
-    useState('Caregiver');
+    useState('');
+
+  const [teamOwnerId, setTeamOwnerId] =
+    useState('');
 
   const [identityReady, setIdentityReady] =
     useState(false);
@@ -80,418 +85,657 @@ export default function ChatScreen() {
   const [loadingMessages, setLoadingMessages] =
     useState(true);
 
-  const [firebaseConnected, setFirebaseConnected] =
-    useState(true);
+  const [sending, setSending] =
+    useState(false);
+
+  const [realtimeConnected, setRealtimeConnected] =
+    useState(false);
 
   const [helpVisible, setHelpVisible] =
     useState(false);
+
+  const [chatError, setChatError] =
+    useState('');
 
   const bubbleMaxWidth = isTablet
     ? Math.min(width * 0.58, 560)
     : width * 0.78;
 
-  const messageFontSize = isTablet ? 18 : 16;
-  const senderFontSize = isTablet ? 14 : 12;
-  const timestampFontSize = isTablet ? 12 : 10;
+  const messageFontSize =
+    isTablet ? 18 : 16;
 
-  const resolveUserIdentity =
-    useCallback(async () => {
-      try {
-        const session = await getSessionSafe();
+  const senderFontSize =
+    isTablet ? 14 : 12;
 
-        if (!session?.user) {
-          setCurrentUserId('local-user');
-          setCurrentUserName('Caregiver');
-          return;
-        }
+  const timestampFontSize =
+    isTablet ? 12 : 10;
 
-        const user = session.user;
-
-        const metadata = user.user_metadata ?? {};
-
-        const metadataName =
-          metadata.full_name ||
-          metadata.name ||
-          metadata.display_name ||
-          metadata.first_name;
-
-        const emailName = user.email
-          ? user.email
-              .split('@')[0]
-              .replace(/[._-]+/g, ' ')
-              .replace(/\b\w/g, (letter) =>
-                letter.toUpperCase()
-              )
-          : '';
-
-        const displayName =
-          typeof metadataName === 'string' &&
-          metadataName.trim()
-            ? metadataName.trim()
-            : emailName || 'Caregiver';
-
-        setCurrentUserId(user.id);
-        setCurrentUserName(displayName);
-      } catch (error) {
-        console.warn(
-          'Unable to load chat user identity:',
-          error
-        );
-
-        setCurrentUserId('local-user');
-        setCurrentUserName('Caregiver');
-      } finally {
-        setIdentityReady(true);
-      }
-    }, []);
-
-  const normalizeMessage = useCallback(
-    (
-      raw: LegacyChatMessage,
-      fallbackId: string
-    ): ChatMessage | null => {
-      const text =
-        typeof raw?.text === 'string'
-          ? raw.text.trim()
-          : '';
-
-      if (!text) {
-        return null;
-      }
-
-      const senderName =
-        typeof raw?.senderName === 'string' &&
-        raw.senderName.trim()
-          ? raw.senderName.trim()
-          : typeof raw?.sender === 'string' &&
-              raw.sender.trim()
-            ? raw.sender.trim()
-            : 'Caregiver';
-
-      let senderId =
-        typeof raw?.senderId === 'string'
-          ? raw.senderId
-          : '';
-
-      /*
-       * Migration support for older local messages.
-       *
-       * Previously, messages only stored sender names.
-       * If that old sender name matches this signed-in
-       * user's display name, treat it as this user's
-       * historical message.
-       */
-      if (
-        !senderId &&
-        identityReady &&
-        senderName === currentUserName
-      ) {
-        senderId = currentUserId;
-      }
-
-      if (!senderId) {
-        senderId = `legacy-${senderName}`;
-      }
-
-      const timestamp =
-        typeof raw?.timestamp === 'string' &&
-        raw.timestamp
-          ? raw.timestamp
-          : new Date().toISOString();
-
-      return {
-        id:
-          typeof raw?.id === 'string' &&
-          raw.id
-            ? raw.id
-            : fallbackId,
-        text,
-        senderId,
-        senderName,
-        timestamp,
-      };
-    },
-    [
-      currentUserId,
-      currentUserName,
-      identityReady,
-    ]
+  const getCacheKey = useCallback(
+    (ownerId: string) =>
+      `carekeeperhub_team_chat_${ownerId}`,
+    []
   );
 
   const saveLocalCache = useCallback(
-    async (updatedMessages: ChatMessage[]) => {
+    async (
+      ownerId: string,
+      updatedMessages: ChatMessage[]
+    ) => {
+      if (!ownerId) {
+        return;
+      }
+
       try {
         await AsyncStorage.setItem(
-          MESSAGES_KEY,
+          getCacheKey(ownerId),
           JSON.stringify(updatedMessages)
         );
       } catch (error) {
         console.warn(
-          'Unable to save local chat cache:',
+          'Unable to save team chat cache:',
           error
         );
       }
     },
-    []
+    [getCacheKey]
   );
 
-  const loadLocalCache =
-    useCallback(async () => {
+  const loadLocalCache = useCallback(
+    async (
+      ownerId: string
+    ): Promise<ChatMessage[]> => {
+      if (!ownerId) {
+        return [];
+      }
+
       try {
         const saved =
           await AsyncStorage.getItem(
-            MESSAGES_KEY
+            getCacheKey(ownerId)
           );
 
         if (!saved) {
           return [];
         }
 
-        const parsed = JSON.parse(saved);
+        const parsed =
+          JSON.parse(saved);
 
         if (!Array.isArray(parsed)) {
           return [];
         }
 
         return parsed
-          .map((item, index) =>
-            normalizeMessage(
-              item,
-              `local-${index}`
-            )
-          )
           .filter(
-            (
-              item
-            ): item is ChatMessage =>
-              Boolean(item)
+            (item): item is ChatMessage =>
+              Boolean(
+                item &&
+                  typeof item.id === 'string' &&
+                  typeof item.team_owner_id ===
+                    'string' &&
+                  typeof item.sender_id ===
+                    'string' &&
+                  typeof item.sender_name ===
+                    'string' &&
+                  typeof item.message ===
+                    'string' &&
+                  typeof item.created_at ===
+                    'string'
+              )
           )
           .sort(
             (a, b) =>
-              new Date(a.timestamp).getTime() -
-              new Date(b.timestamp).getTime()
+              new Date(
+                a.created_at
+              ).getTime() -
+              new Date(
+                b.created_at
+              ).getTime()
           );
       } catch (error) {
         console.warn(
-          'Unable to load local chat cache:',
+          'Unable to load team chat cache:',
           error
         );
 
         return [];
       }
-    }, [normalizeMessage]);
+    },
+    [getCacheKey]
+  );
 
-  useEffect(() => {
-    resolveUserIdentity();
-  }, [resolveUserIdentity]);
+  const buildProfileName = useCallback(
+    (
+      profile: ProfileRecord | null,
+      fallbackEmail?: string
+    ) => {
+      const firstName =
+        profile?.first_name?.trim() ?? '';
 
-  useEffect(() => {
-    if (!identityReady) {
-      return;
-    }
+      const lastName =
+        profile?.last_name?.trim() ?? '';
 
-    let unsubscribe:
-      | (() => void)
-      | undefined;
+      const fullName =
+        [firstName, lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
 
-    const startChat = async () => {
-      const cachedMessages =
-        await loadLocalCache();
-
-      if (cachedMessages.length > 0) {
-        setMessages(cachedMessages);
+      if (fullName) {
+        return fullName;
       }
 
-      const messagesRef = ref(
-        db,
-        CHAT_PATH
-      );
+      const email =
+        profile?.email?.trim() ||
+        fallbackEmail?.trim() ||
+        '';
 
-      unsubscribe = onValue(
-        messagesRef,
-        async (snapshot) => {
-          const value = snapshot.val();
-
-          if (!value) {
-            setMessages([]);
-            await saveLocalCache([]);
-            setFirebaseConnected(true);
-            setLoadingMessages(false);
-            return;
-          }
-
-          const remoteMessages =
-            Object.entries(value)
-              .map(([id, raw]) =>
-                normalizeMessage(
-                  raw as LegacyChatMessage,
-                  id
-                )
-              )
-              .filter(
-                (
-                  item
-                ): item is ChatMessage =>
-                  Boolean(item)
-              )
-              .sort(
-                (a, b) =>
-                  new Date(
-                    a.timestamp
-                  ).getTime() -
-                  new Date(
-                    b.timestamp
-                  ).getTime()
-              );
-
-          setMessages(remoteMessages);
-
-          await saveLocalCache(
-            remoteMessages
+      if (email) {
+        return email
+          .split('@')[0]
+          .replace(/[._-]+/g, ' ')
+          .replace(
+            /\b\w/g,
+            (letter) =>
+              letter.toUpperCase()
           );
-
-          setFirebaseConnected(true);
-          setLoadingMessages(false);
-
-          requestAnimationFrame(() => {
-            flatListRef.current?.scrollToEnd(
-              {
-                animated: false,
-              }
-            );
-          });
-        },
-        async (error) => {
-          console.warn(
-            'Firebase chat listener error:',
-            error
-          );
-
-          setFirebaseConnected(false);
-          setLoadingMessages(false);
-
-          if (
-            cachedMessages.length === 0
-          ) {
-            setMessages([]);
-          }
-        }
-      );
-    };
-
-    startChat();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
       }
-    };
-  }, [
-    identityReady,
-    loadLocalCache,
-    normalizeMessage,
-    saveLocalCache,
-  ]);
 
-  const scrollToLatest = useCallback(
-    (animated = true) => {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({
-          animated,
-        });
-      }, 80);
+      return 'Caregiver';
     },
     []
   );
 
-  const handleSend = async () => {
-    const trimmedInput = input.trim();
+  const resolveChatIdentity =
+    useCallback(async () => {
+      try {
+        setIdentityReady(false);
+        setChatError('');
 
+        const session =
+          await getSessionSafe();
+
+        if (!session?.user) {
+          setChatError(
+            'Your login session could not be found. Please sign in again.'
+          );
+          return;
+        }
+
+        const user =
+          session.user;
+
+        const {
+          data: profileData,
+          error: profileError,
+        } = await supabase
+          .from('profiles')
+          .select(
+            'id, first_name, last_name, email'
+          )
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.warn(
+            'Unable to load chat profile:',
+            profileError
+          );
+        }
+
+        const profile =
+          (profileData as ProfileRecord | null) ??
+          null;
+
+        const displayName =
+          buildProfileName(
+            profile,
+            user.email
+          );
+
+        setCurrentUserId(
+          user.id
+        );
+
+        setCurrentUserName(
+          displayName
+        );
+
+        /*
+         * Determine which care-team chat this user belongs to.
+         *
+         * If this user appears as a member in team_members,
+         * their chat belongs to that owner.
+         *
+         * If they are not a member of another owner's team,
+         * they are treated as the owner of their own care team.
+         */
+        const {
+          data: membershipData,
+          error: membershipError,
+        } = await supabase
+          .from('team_members')
+          .select(
+            'owner_id, created_at'
+          )
+          .eq(
+            'member_user_id',
+            user.id
+          )
+          .order(
+            'created_at',
+            {
+              ascending: true,
+            }
+          )
+          .limit(2);
+
+        if (membershipError) {
+          throw membershipError;
+        }
+
+        const memberships =
+          (membershipData ??
+            []) as TeamMembership[];
+
+        if (
+          memberships.length > 1
+        ) {
+          console.warn(
+            'User belongs to multiple care teams. Using the first membership.'
+          );
+        }
+
+        const resolvedOwnerId =
+          memberships.length > 0
+            ? memberships[0].owner_id
+            : user.id;
+
+        setTeamOwnerId(
+          resolvedOwnerId
+        );
+      } catch (error: any) {
+        console.warn(
+          'Unable to prepare team chat:',
+          error
+        );
+
+        setChatError(
+          error?.message ??
+            'Care Team Chat could not be prepared.'
+        );
+      } finally {
+        setIdentityReady(true);
+      }
+    }, [buildProfileName]);
+
+  useEffect(() => {
+    resolveChatIdentity();
+  }, [resolveChatIdentity]);
+
+  const scrollToLatest =
+    useCallback(
+      (
+        animated = true
+      ) => {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd(
+            {
+              animated,
+            }
+          );
+        }, 80);
+      },
+      []
+    );
+
+  const loadMessages =
+    useCallback(
+      async (
+        ownerId: string,
+        showLoading = false
+      ) => {
+        if (!ownerId) {
+          return;
+        }
+
+        if (showLoading) {
+          setLoadingMessages(
+            true
+          );
+        }
+
+        try {
+          const {
+            data,
+            error,
+          } = await supabase
+            .from(
+              'team_messages'
+            )
+            .select(
+              `
+                id,
+                team_owner_id,
+                sender_id,
+                sender_name,
+                message,
+                created_at
+              `
+            )
+            .eq(
+              'team_owner_id',
+              ownerId
+            )
+            .order(
+              'created_at',
+              {
+                ascending: true,
+              }
+            );
+
+          if (error) {
+            throw error;
+          }
+
+          const remoteMessages =
+            (data ??
+              []) as ChatMessage[];
+
+          setMessages(
+            remoteMessages
+          );
+
+          await saveLocalCache(
+            ownerId,
+            remoteMessages
+          );
+
+          setChatError('');
+
+          requestAnimationFrame(
+            () => {
+              scrollToLatest(
+                false
+              );
+            }
+          );
+        } catch (error: any) {
+          console.warn(
+            'Unable to load team messages:',
+            error
+          );
+
+          const cachedMessages =
+            await loadLocalCache(
+              ownerId
+            );
+
+          setMessages(
+            cachedMessages
+          );
+
+          setChatError(
+            cachedMessages.length >
+              0
+              ? 'Live chat is temporarily unavailable. Showing saved messages.'
+              : error?.message ??
+                  'Care Team Chat is temporarily unavailable.'
+          );
+        } finally {
+          setLoadingMessages(
+            false
+          );
+        }
+      },
+      [
+        loadLocalCache,
+        saveLocalCache,
+        scrollToLatest,
+      ]
+    );
+
+  useEffect(() => {
     if (
-      !trimmedInput ||
       !identityReady ||
+      !teamOwnerId ||
       !currentUserId
     ) {
       return;
     }
 
-    Keyboard.dismiss();
+    let mounted = true;
 
-    const newMessage = {
-      text: trimmedInput,
-      senderId: currentUserId,
-      senderName: currentUserName,
-      timestamp:
-        new Date().toISOString(),
-    };
+    const startChat =
+      async () => {
+        const cachedMessages =
+          await loadLocalCache(
+            teamOwnerId
+          );
 
-    setInput('');
+        if (
+          mounted &&
+          cachedMessages.length >
+            0
+        ) {
+          setMessages(
+            cachedMessages
+          );
+        }
 
-    try {
-      const messagesRef = ref(
-        db,
-        CHAT_PATH
-      );
-
-      await push(
-        messagesRef,
-        newMessage
-      );
-
-      setFirebaseConnected(true);
-      scrollToLatest();
-    } catch (error) {
-      console.warn(
-        'Unable to send Firebase message:',
-        error
-      );
-
-      setFirebaseConnected(false);
-
-      /*
-       * Keep the message locally so the user
-       * doesn't lose what they just typed.
-       */
-      const localMessage: ChatMessage = {
-        id: `local-${Date.now()}`,
-        ...newMessage,
+        if (mounted) {
+          await loadMessages(
+            teamOwnerId,
+            true
+          );
+        }
       };
 
-      const updatedMessages = [
-        ...messages,
-        localMessage,
-      ];
+    startChat();
 
-      setMessages(updatedMessages);
+    const channel =
+      supabase
+        .channel(
+          `team-chat-${teamOwnerId}-${currentUserId}`
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'team_messages',
+            filter:
+              `team_owner_id=eq.${teamOwnerId}`,
+          },
+          () => {
+            if (mounted) {
+              void loadMessages(
+                teamOwnerId,
+                false
+              );
+            }
+          }
+        )
+        .subscribe(
+          (status) => {
+            if (!mounted) {
+              return;
+            }
 
-      await saveLocalCache(
-        updatedMessages
+            if (
+              status ===
+              'SUBSCRIBED'
+            ) {
+              setRealtimeConnected(
+                true
+              );
+              return;
+            }
+
+            if (
+              status ===
+                'CHANNEL_ERROR' ||
+              status ===
+                'TIMED_OUT' ||
+              status ===
+                'CLOSED'
+            ) {
+              setRealtimeConnected(
+                false
+              );
+            }
+          }
+        );
+
+    return () => {
+      mounted = false;
+
+      void supabase.removeChannel(
+        channel
       );
+    };
+  }, [
+    currentUserId,
+    identityReady,
+    loadLocalCache,
+    loadMessages,
+    teamOwnerId,
+  ]);
 
-      Alert.alert(
-        'Message Saved Locally',
-        'The message could not reach the shared chat right now. It has been kept on this device.'
-      );
+  const handleSend =
+    async () => {
+      const trimmedInput =
+        input.trim();
 
-      scrollToLatest();
-    }
-  };
+      if (
+        !trimmedInput ||
+        !identityReady ||
+        !currentUserId ||
+        !currentUserName ||
+        !teamOwnerId ||
+        sending
+      ) {
+        return;
+      }
+
+      Keyboard.dismiss();
+
+      setSending(true);
+      setInput('');
+
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'team_messages'
+          )
+          .insert({
+            team_owner_id:
+              teamOwnerId,
+            sender_id:
+              currentUserId,
+            sender_name:
+              currentUserName,
+            message:
+              trimmedInput,
+          })
+          .select(
+            `
+              id,
+              team_owner_id,
+              sender_id,
+              sender_name,
+              message,
+              created_at
+            `
+          )
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        const insertedMessage =
+          data as ChatMessage;
+
+        setMessages(
+          (
+            previousMessages
+          ) => {
+            const alreadyExists =
+              previousMessages.some(
+                (item) =>
+                  item.id ===
+                  insertedMessage.id
+              );
+
+            if (
+              alreadyExists
+            ) {
+              return previousMessages;
+            }
+
+            const updated = [
+              ...previousMessages,
+              insertedMessage,
+            ];
+
+            void saveLocalCache(
+              teamOwnerId,
+              updated
+            );
+
+            return updated;
+          }
+        );
+
+        setChatError('');
+        scrollToLatest();
+      } catch (error: any) {
+        console.warn(
+          'Unable to send team message:',
+          error
+        );
+
+        setInput(
+          trimmedInput
+        );
+
+        Alert.alert(
+          'Message Not Sent',
+          error?.message ??
+            'Your message could not be sent. Please try again.'
+        );
+      } finally {
+        setSending(false);
+      }
+    };
 
   const formatTime = (
     isoString: string
   ) => {
-    const date = new Date(isoString);
+    const date =
+      new Date(
+        isoString
+      );
 
     if (
-      Number.isNaN(date.getTime())
+      Number.isNaN(
+        date.getTime()
+      )
     ) {
       return '';
     }
 
-    return date.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    return date.toLocaleTimeString(
+      [],
+      {
+        hour: 'numeric',
+        minute: '2-digit',
+      }
+    );
   };
 
   const renderItem = ({
@@ -500,7 +744,8 @@ export default function ChatScreen() {
     item: ChatMessage;
   }) => {
     const isCurrentUser =
-      item.senderId === currentUserId;
+      item.sender_id ===
+      currentUserId;
 
     return (
       <View
@@ -533,7 +778,9 @@ export default function ChatScreen() {
                 },
               ]}
             >
-              {item.senderName}
+              {
+                item.sender_name
+              }
             </Text>
           )}
 
@@ -548,7 +795,7 @@ export default function ChatScreen() {
                 styles.messageTextRight,
             ]}
           >
-            {item.text}
+            {item.message}
           </Text>
 
           <Text
@@ -563,7 +810,7 @@ export default function ChatScreen() {
             ]}
           >
             {formatTime(
-              item.timestamp
+              item.created_at
             )}
           </Text>
         </View>
@@ -571,73 +818,89 @@ export default function ChatScreen() {
     );
   };
 
-  const emptyState = useMemo(
-    () => (
-      <View
-        style={styles.emptyContainer}
-      >
+  const emptyState =
+    useMemo(
+      () => (
         <View
-          style={[
-            styles.emptyIcon,
-            isTablet && {
-              width: 72,
-              height: 72,
-              borderRadius: 36,
-            },
-          ]}
+          style={
+            styles.emptyContainer
+          }
         >
-          <Text
+          <View
             style={[
-              styles.emptyIconText,
+              styles.emptyIcon,
               isTablet && {
-                fontSize: 31,
+                width: 72,
+                height: 72,
+                borderRadius: 36,
               },
             ]}
           >
-            💬
+            <Text
+              style={[
+                styles.emptyIconText,
+                isTablet && {
+                  fontSize: 31,
+                },
+              ]}
+            >
+              💬
+            </Text>
+          </View>
+
+          <Text
+            style={[
+              styles.emptyTitle,
+              isTablet && {
+                fontSize: 22,
+              },
+            ]}
+          >
+            Start the conversation
+          </Text>
+
+          <Text
+            style={[
+              styles.emptyText,
+              isTablet && {
+                fontSize: 16,
+                lineHeight: 23,
+              },
+            ]}
+          >
+            Share an update with
+            your care team.
           </Text>
         </View>
+      ),
+      [isTablet]
+    );
 
-        <Text
-          style={[
-            styles.emptyTitle,
-            isTablet && {
-              fontSize: 22,
-            },
-          ]}
-        >
-          Start the conversation
-        </Text>
-
-        <Text
-          style={[
-            styles.emptyText,
-            isTablet && {
-              fontSize: 16,
-              lineHeight: 23,
-            },
-          ]}
-        >
-          Share an update with the
-          caregiving team.
-        </Text>
-      </View>
-    ),
-    [isTablet]
-  );
+  const canSend =
+    Boolean(
+      input.trim() &&
+        currentUserId &&
+        teamOwnerId &&
+        identityReady &&
+        !sending
+    );
 
   return (
     <View style={styles.screen}>
       <NavHeader />
 
       <KeyboardAvoidingView
-        style={styles.keyboardContainer}
+        style={
+          styles.keyboardContainer
+        }
         behavior={
           Platform.OS === 'ios'
             ? 'padding'
             : undefined
         }
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={
+          0
+        }
       >
         <View
           style={[
@@ -646,18 +909,53 @@ export default function ChatScreen() {
               styles.chatContainerTablet,
           ]}
         >
-          <View style={styles.chatHeading}>
-            <View style={styles.headingText}>
-              <Text
-                style={[
-                  styles.pageTitle,
-                  isTablet && {
-                    fontSize: 27,
-                  },
-                ]}
+          <View
+            style={
+              styles.chatHeading
+            }
+          >
+            <View
+              style={
+                styles.headingText
+              }
+            >
+              <View
+                style={
+                  styles.titleRow
+                }
               >
-                Care Team Chat
-              </Text>
+                <Text
+                  style={[
+                    styles.pageTitle,
+                    isTablet && {
+                      fontSize: 27,
+                    },
+                  ]}
+                >
+                  Care Team Chat
+                </Text>
+
+                {realtimeConnected && (
+                  <View
+                    style={
+                      styles.liveBadge
+                    }
+                  >
+                    <View
+                      style={
+                        styles.liveDot
+                      }
+                    />
+                    <Text
+                      style={
+                        styles.liveText
+                      }
+                    >
+                      Live
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               <Text
                 style={[
@@ -667,8 +965,9 @@ export default function ChatScreen() {
                   },
                 ]}
               >
-                Signed in as{' '}
-                {currentUserName}
+                {currentUserName
+                  ? `Signed in as ${currentUserName}`
+                  : 'Preparing your care team...'}
               </Text>
             </View>
 
@@ -682,19 +981,25 @@ export default function ChatScreen() {
                 },
               ]}
               onPress={() =>
-                setHelpVisible(true)
+                setHelpVisible(
+                  true
+                )
               }
-              activeOpacity={0.75}
+              activeOpacity={
+                0.75
+              }
             >
               <Text
-                style={styles.helpButtonText}
+                style={
+                  styles.helpButtonText
+                }
               >
                 ?
               </Text>
             </TouchableOpacity>
           </View>
 
-          {!firebaseConnected && (
+          {chatError ? (
             <View
               style={
                 styles.offlineBanner
@@ -705,14 +1010,13 @@ export default function ChatScreen() {
                   styles.offlineText
                 }
               >
-                Shared chat is temporarily
-                unavailable. Showing saved
-                messages.
+                {chatError}
               </Text>
             </View>
-          )}
+          ) : null}
 
-          {loadingMessages ? (
+          {!identityReady ||
+          loadingMessages ? (
             <View
               style={
                 styles.loadingContainer
@@ -728,21 +1032,30 @@ export default function ChatScreen() {
                   styles.loadingText
                 }
               >
-                Loading messages...
+                Loading care team chat...
               </Text>
             </View>
           ) : (
             <FlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={(item) =>
-                item.id
+              ref={
+                flatListRef
               }
-              renderItem={renderItem}
-              style={styles.messageList}
+              data={
+                messages
+              }
+              keyExtractor={(
+                item
+              ) => item.id}
+              renderItem={
+                renderItem
+              }
+              style={
+                styles.messageList
+              }
               contentContainerStyle={[
                 styles.messagesContainer,
-                messages.length === 0 &&
+                messages.length ===
+                  0 &&
                   styles.emptyListContainer,
               ]}
               ListEmptyComponent={
@@ -753,13 +1066,15 @@ export default function ChatScreen() {
               }
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={
-                Platform.OS === 'ios'
+                Platform.OS ===
+                'ios'
                   ? 'interactive'
                   : 'on-drag'
               }
               onContentSizeChange={() => {
                 if (
-                  messages.length > 0
+                  messages.length >
+                  0
                 ) {
                   scrollToLatest(
                     false
@@ -788,17 +1103,28 @@ export default function ChatScreen() {
               placeholder="Message the care team..."
               placeholderTextColor="#A0A4AA"
               value={input}
-              onChangeText={setInput}
+              onChangeText={
+                setInput
+              }
               multiline
-              maxLength={1000}
+              maxLength={
+                MESSAGE_LIMIT
+              }
               returnKeyType="default"
               textAlignVertical="center"
+              editable={
+                identityReady &&
+                Boolean(
+                  teamOwnerId
+                ) &&
+                !sending
+              }
             />
 
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                !input.trim() &&
+                !canSend &&
                   styles.sendButtonDisabled,
                 isTablet && {
                   minHeight: 52,
@@ -806,37 +1132,54 @@ export default function ChatScreen() {
                   borderRadius: 18,
                 },
               ]}
-              onPress={handleSend}
-              activeOpacity={0.8}
+              onPress={
+                handleSend
+              }
+              activeOpacity={
+                0.8
+              }
               disabled={
-                !input.trim()
+                !canSend
               }
             >
-              <Text
-                style={[
-                  styles.sendButtonText,
-                  isTablet && {
-                    fontSize: 16,
-                  },
-                ]}
-              >
-                Send
-              </Text>
+              {sending ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.sendButtonText,
+                    isTablet && {
+                      fontSize: 16,
+                    },
+                  ]}
+                >
+                  Send
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
 
       <Modal
-        visible={helpVisible}
+        visible={
+          helpVisible
+        }
         transparent
         animationType="fade"
         onRequestClose={() =>
-          setHelpVisible(false)
+          setHelpVisible(
+            false
+          )
         }
       >
         <View
-          style={styles.modalOverlay}
+          style={
+            styles.modalOverlay
+          }
         >
           <View
             style={[
@@ -848,25 +1191,34 @@ export default function ChatScreen() {
             ]}
           >
             <Text
-              style={styles.modalTitle}
+              style={
+                styles.modalTitle
+              }
             >
               Care Team Chat
             </Text>
 
             <Text
-              style={styles.helpText}
+              style={
+                styles.helpText
+              }
             >
-              Use Chat to share updates
-              with the caregiving team.
-              Messages are shown under
-              the name connected to your
-              signed-in account.
+              Use Chat to share
+              updates with your care
+              team. Only the care-team
+              owner and users added as
+              Team Members can access
+              this conversation.
             </Text>
 
             <Pressable
-              style={styles.gotItButton}
+              style={
+                styles.gotItButton
+              }
               onPress={() =>
-                setHelpVisible(false)
+                setHelpVisible(
+                  false
+                )
               }
             >
               <Text
@@ -884,303 +1236,374 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F7F8FA',
-  },
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        '#F7F8FA',
+    },
 
-  keyboardContainer: {
-    flex: 1,
-  },
+    keyboardContainer: {
+      flex: 1,
+    },
 
-  chatContainer: {
-    flex: 1,
-    width: '100%',
-    alignSelf: 'center',
-  },
+    chatContainer: {
+      flex: 1,
+      width: '100%',
+      alignSelf:
+        'center',
+    },
 
-  chatContainerTablet: {
-    maxWidth: 980,
-  },
+    chatContainerTablet: {
+      maxWidth: 980,
+    },
 
-  chatHeading: {
-    minHeight: 76,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    backgroundColor: '#F7F8FA',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EA',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent:
-      'space-between',
-  },
+    chatHeading: {
+      minHeight: 76,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+      backgroundColor:
+        '#F7F8FA',
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#E5E7EA',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+    },
 
-  headingText: {
-    flex: 1,
-    paddingRight: 12,
-  },
+    headingText: {
+      flex: 1,
+      paddingRight: 12,
+    },
 
-  pageTitle: {
-    color: '#151515',
-    fontSize: 22,
-    fontWeight: '700',
-  },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    },
 
-  pageSubtitle: {
-    color: '#747A82',
-    fontSize: 13,
-    marginTop: 3,
-  },
+    pageTitle: {
+      color: '#151515',
+      fontSize: 22,
+      fontWeight: '700',
+    },
 
-  helpButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#DFE2E6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    pageSubtitle: {
+      color: '#747A82',
+      fontSize: 13,
+      marginTop: 3,
+    },
 
-  helpButtonText: {
-    color: '#1976D2',
-    fontSize: 19,
-    fontWeight: '700',
-  },
+    liveBadge: {
+      marginLeft: 9,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor:
+        '#E8F5EE',
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
 
-  offlineBanner: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    backgroundColor: '#FFF4D8',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
+    liveDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor:
+        '#2E9B61',
+      marginRight: 5,
+    },
 
-  offlineText: {
-    color: '#78601C',
-    fontSize: 12,
-    textAlign: 'center',
-  },
+    liveText: {
+      color: '#26784D',
+      fontSize: 11,
+      fontWeight: '700',
+    },
 
-  messageList: {
-    flex: 1,
-  },
+    helpButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#DFE2E6',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  messagesContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 20,
-  },
+    helpButtonText: {
+      color: '#1976D2',
+      fontSize: 19,
+      fontWeight: '700',
+    },
 
-  emptyListContainer: {
-    flexGrow: 1,
-  },
+    offlineBanner: {
+      marginHorizontal: 16,
+      marginTop: 10,
+      backgroundColor:
+        '#FFF4D8',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
 
-  messageRow: {
-    width: '100%',
-    marginBottom: 9,
-  },
+    offlineText: {
+      color: '#78601C',
+      fontSize: 12,
+      textAlign: 'center',
+    },
 
-  messageRowLeft: {
-    alignItems: 'flex-start',
-  },
+    messageList: {
+      flex: 1,
+    },
 
-  messageRowRight: {
-    alignItems: 'flex-end',
-  },
+    messagesContainer: {
+      paddingHorizontal: 16,
+      paddingTop: 18,
+      paddingBottom: 20,
+    },
 
-  messageBubble: {
-    minWidth: 76,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderRadius: 20,
-  },
+    emptyListContainer: {
+      flexGrow: 1,
+    },
 
-  bubbleLeft: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E1E4E8',
-    borderBottomLeftRadius: 6,
-  },
+    messageRow: {
+      width: '100%',
+      marginBottom: 9,
+    },
 
-  bubbleRight: {
-    backgroundColor: '#1976D2',
-    borderBottomRightRadius: 6,
-  },
+    messageRowLeft: {
+      alignItems:
+        'flex-start',
+    },
 
-  senderName: {
-    color: '#1976D2',
-    fontWeight: '700',
-    marginBottom: 4,
-  },
+    messageRowRight: {
+      alignItems:
+        'flex-end',
+    },
 
-  messageText: {
-    color: '#1A1A1A',
-    lineHeight: 22,
-  },
+    messageBubble: {
+      minWidth: 76,
+      paddingHorizontal: 14,
+      paddingTop: 10,
+      paddingBottom: 8,
+      borderRadius: 20,
+    },
 
-  messageTextRight: {
-    color: '#FFFFFF',
-  },
+    bubbleLeft: {
+      backgroundColor:
+        '#FFFFFF',
+      borderWidth: 1,
+      borderColor:
+        '#E1E4E8',
+      borderBottomLeftRadius: 6,
+    },
 
-  timestamp: {
-    color: '#8A9097',
-    marginTop: 5,
-    textAlign: 'right',
-  },
+    bubbleRight: {
+      backgroundColor:
+        '#1976D2',
+      borderBottomRightRadius: 6,
+    },
 
-  timestampRight: {
-    color: '#DCEBFA',
-  },
+    senderName: {
+      color: '#1976D2',
+      fontWeight: '700',
+      marginBottom: 4,
+    },
 
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingBottom: 80,
-  },
+    messageText: {
+      color: '#1A1A1A',
+      lineHeight: 22,
+    },
 
-  emptyIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#E5F2FC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
+    messageTextRight: {
+      color: '#FFFFFF',
+    },
 
-  emptyIconText: {
-    fontSize: 27,
-  },
+    timestamp: {
+      color: '#8A9097',
+      marginTop: 5,
+      textAlign: 'right',
+    },
 
-  emptyTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#27292D',
-    marginBottom: 5,
-  },
+    timestampRight: {
+      color: '#DCEBFA',
+    },
 
-  emptyText: {
-    maxWidth: 310,
-    textAlign: 'center',
-    color: '#7B8087',
-    fontSize: 14,
-    lineHeight: 20,
-  },
+    emptyContainer: {
+      flex: 1,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      paddingHorizontal: 30,
+      paddingBottom: 80,
+    },
 
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    emptyIcon: {
+      width: 62,
+      height: 62,
+      borderRadius: 31,
+      backgroundColor:
+        '#E5F2FC',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      marginBottom: 14,
+    },
 
-  loadingText: {
-    color: '#777',
-    fontSize: 14,
-    marginTop: 10,
-  },
+    emptyIconText: {
+      fontSize: 27,
+    },
 
-  composer: {
-    minHeight: 72,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E3E7',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
+    emptyTitle: {
+      fontSize: 19,
+      fontWeight: '700',
+      color: '#27292D',
+      marginBottom: 5,
+    },
 
-  composerTablet: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
+    emptyText: {
+      maxWidth: 310,
+      textAlign: 'center',
+      color: '#7B8087',
+      fontSize: 14,
+      lineHeight: 20,
+    },
 
-  messageInput: {
-    flex: 1,
-    minHeight: 46,
-    maxHeight: 110,
-    borderWidth: 1,
-    borderColor: '#D5D9DE',
-    borderRadius: 17,
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 15,
-    paddingTop: 11,
-    paddingBottom: 11,
-    marginRight: 9,
-    color: '#151515',
-    fontSize: 16,
-  },
+    loadingContainer: {
+      flex: 1,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  sendButton: {
-    minHeight: 46,
-    paddingHorizontal: 19,
-    borderRadius: 17,
-    backgroundColor: '#1976D2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    loadingText: {
+      color: '#777',
+      fontSize: 14,
+      marginTop: 10,
+    },
 
-  sendButtonDisabled: {
-    backgroundColor: '#B9CFE7',
-  },
+    composer: {
+      minHeight: 72,
+      backgroundColor:
+        '#FFFFFF',
+      borderTopWidth: 1,
+      borderTopColor:
+        '#E0E3E7',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems:
+        'flex-end',
+    },
 
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
+    composerTablet: {
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 22,
-  },
+    messageInput: {
+      flex: 1,
+      minHeight: 46,
+      maxHeight: 110,
+      borderWidth: 1,
+      borderColor:
+        '#D5D9DE',
+      borderRadius: 17,
+      backgroundColor:
+        '#F9FAFB',
+      paddingHorizontal: 15,
+      paddingTop: 11,
+      paddingBottom: 11,
+      marginRight: 9,
+      color: '#151515',
+      fontSize: 16,
+    },
 
-  modalBox: {
-    width: '100%',
-    maxWidth: 380,
-    borderRadius: 18,
-    padding: 22,
-    backgroundColor: '#FFFFFF',
-  },
+    sendButton: {
+      minHeight: 46,
+      minWidth: 78,
+      paddingHorizontal: 19,
+      borderRadius: 17,
+      backgroundColor:
+        '#1976D2',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
 
-  modalTitle: {
-    color: '#151515',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
+    sendButtonDisabled: {
+      backgroundColor:
+        '#B9CFE7',
+    },
 
-  helpText: {
-    color: '#4E5359',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+    sendButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '700',
+      fontSize: 15,
+    },
 
-  gotItButton: {
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#1976D2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor:
+        'rgba(0,0,0,0.45)',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      padding: 22,
+    },
 
-  gotItButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+    modalBox: {
+      width: '100%',
+      maxWidth: 380,
+      borderRadius: 18,
+      padding: 22,
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    modalTitle: {
+      color: '#151515',
+      fontSize: 22,
+      fontWeight: '700',
+      textAlign: 'center',
+      marginBottom: 10,
+    },
+
+    helpText: {
+      color: '#4E5359',
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+
+    gotItButton: {
+      minHeight: 48,
+      borderRadius: 12,
+      backgroundColor:
+        '#1976D2',
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    gotItButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+  });
